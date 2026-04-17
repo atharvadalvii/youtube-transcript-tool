@@ -33,19 +33,23 @@ export async function POST(req: Request) {
       const trimmed = lang.replace(/_/g, "-");
       if (trimmed.length !== 2) return [trimmed] as string[];
 
-      // Try common English variants when the user picks "en"
-      // (extendable for other languages later if needed).
-      const variants =
-        trimmed.toLowerCase() === "en"
-          ? [
-              trimmed,
-              "en-US",
-              "en-GB",
-              "en-AU",
-              "en-CA",
-              "en-NZ",
-            ]
-          : [trimmed];
+      const extraVariants: Record<string, string[]> = {
+        en: ["en", "en-US", "en-GB", "en-AU", "en-CA"],
+        zh: ["zh", "zh-Hans", "zh-Hant", "zh-CN", "zh-TW", "zh-HK"],
+        pt: ["pt", "pt-BR", "pt-PT"],
+        es: ["es", "es-419", "es-ES", "es-MX"],
+        fr: ["fr", "fr-FR", "fr-CA", "fr-BE"],
+        de: ["de", "de-DE", "de-AT", "de-CH"],
+        ar: ["ar", "ar-SA", "ar-EG"],
+        hi: ["hi"],
+        ja: ["ja"],
+        ko: ["ko"],
+        ru: ["ru"],
+        it: ["it"],
+        tr: ["tr"],
+        id: ["id"],
+      };
+      const variants = extraVariants[trimmed.toLowerCase()] ?? [trimmed];
       return variants;
     })();
 
@@ -64,11 +68,7 @@ export async function POST(req: Request) {
     }
 
     if (!raw) {
-      // Final fallback: grab whatever transcript is available.
-      // This improves bulk success rate, but may be less "word-to-word".
-      if (lang) {
-        raw = await fetchTranscript(videoId);
-      } else if (lastError instanceof Error) {
+      if (lastError instanceof Error) {
         throw lastError;
       } else {
         throw new Error("Could not load captions for this video.");
