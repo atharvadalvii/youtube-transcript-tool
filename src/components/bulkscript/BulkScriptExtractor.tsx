@@ -19,7 +19,7 @@ import TranscriptPane from "./TranscriptPane";
 import ExportToolbar from "./ExportToolbar";
 import SettingsDrawer from "./SettingsDrawer";
 import GlobalSearch from "./GlobalSearch";
-import { Settings, Search } from "lucide-react";
+import { Settings, Search, Trash2 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BrandLogo } from "@/components/brand-logo";
 import { siteFontStyle } from "@/lib/site-theme";
@@ -29,18 +29,38 @@ export default function BulkScriptExtractor({
 }: {
   initialUrl?: string;
 }) {
-  const [jobs, setJobs] = useState<TranscriptJob[]>([]);
+  function loadFromStorage<T>(key: string, fallback: T): T {
+    if (typeof window === "undefined") return fallback;
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  const [jobs, setJobs] = useState<TranscriptJob[]>(() =>
+    loadFromStorage<TranscriptJob[]>("yt_jobs", []).map((j) =>
+      j.status === "processing" || j.status === "pending"
+        ? { ...j, status: "failed" as const, failureReason: "unknown" as const, errorMessage: "Interrupted by page refresh." }
+        : j
+    )
+  );
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [scrollToSeconds, setScrollToSeconds] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("TXT");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>(
+    () => loadFromStorage<ExportFormat>("yt_export_format", "TXT")
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<ExtractorSettings>({
-    language: "en",
-    includeTimestamps: true,
-    speakerDetection: true,
-    rateLimitMs: 1000,
-  });
+  const [settings, setSettings] = useState<ExtractorSettings>(() =>
+    loadFromStorage<ExtractorSettings>("yt_settings", {
+      language: "en",
+      includeTimestamps: true,
+      speakerDetection: true,
+      rateLimitMs: 1000,
+    })
+  );
 
   const completedCount = jobs.filter((j) => j.status === "done").length;
 
@@ -54,6 +74,19 @@ export default function BulkScriptExtractor({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [completedCount]);
+
+  // Persist jobs, settings and format to localStorage
+  useEffect(() => {
+    try { localStorage.setItem("yt_jobs", JSON.stringify(jobs)); } catch {}
+  }, [jobs]);
+
+  useEffect(() => {
+    try { localStorage.setItem("yt_settings", JSON.stringify(settings)); } catch {}
+  }, [settings]);
+
+  useEffect(() => {
+    try { localStorage.setItem("yt_export_format", JSON.stringify(exportFormat)); } catch {}
+  }, [exportFormat]);
 
   // Serialize transcript fetching to avoid YouTube throttling/captcha on bulk playlists.
   const transcriptQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -231,10 +264,7 @@ export default function BulkScriptExtractor({
             className="flex items-center gap-2.5 min-w-0"
             aria-label="Home"
           >
-            <BrandLogo
-              size={30}
-              className="text-gray-300 dark:text-zinc-600 shrink-0"
-            />
+            <BrandLogo size={30} className="text-gray-300 dark:text-zinc-600 shrink-0" />
             <div className="min-w-0">
               <span className="text-sm font-semibold tracking-tight truncate block">
                 Transcript studio
@@ -250,6 +280,23 @@ export default function BulkScriptExtractor({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {jobs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Clear all jobs? This cannot be undone.")) {
+                  setJobs([]);
+                  setSelectedJobId(null);
+                  try { localStorage.removeItem("yt_jobs"); } catch {}
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition-colors"
+              title="Clear all jobs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Clear</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => completedCount > 0 && setSearchOpen(true)}

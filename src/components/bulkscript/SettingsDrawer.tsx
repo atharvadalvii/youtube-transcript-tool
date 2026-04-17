@@ -55,6 +55,7 @@ interface SettingsDrawerProps {
 
 const LANGUAGES = [
   { code: "en", label: "English" },
+  { code: "hi", label: "Hindi" },
   { code: "es", label: "Spanish" },
   { code: "fr", label: "French" },
   { code: "de", label: "German" },
@@ -64,6 +65,9 @@ const LANGUAGES = [
   { code: "ar", label: "Arabic" },
   { code: "ko", label: "Korean" },
   { code: "ru", label: "Russian" },
+  { code: "it", label: "Italian" },
+  { code: "tr", label: "Turkish" },
+  { code: "id", label: "Indonesian" },
 ];
 
 const RATE_LIMITS = [

@@ -58,6 +58,8 @@ export default function StatsBar({ jobs }: StatsBarProps) {
     });
   }
 
+  if (totalQueued === 0) return null;
+
   return (
     <div className="flex items-center border-b border-gray-200 dark:border-zinc-800 bg-gray-50/90 dark:bg-zinc-900/80 h-9 text-[11px] sm:text-xs">
       <div className="flex items-center gap-0 h-full overflow-x-auto">

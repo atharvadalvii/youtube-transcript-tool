@@ -73,15 +73,15 @@ export default function JobQueue({
 
   if (jobs.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8">
-        <div className="w-12 h-12 flex items-center justify-center mb-4 rounded-xl border border-gray-200 dark:border-zinc-700">
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-12 h-12 flex items-center justify-center mb-4 rounded-xl bg-gray-50 dark:bg-zinc-800/60 border border-dashed border-gray-200 dark:border-zinc-700">
           <Clock className="w-5 h-5 text-gray-300 dark:text-zinc-600" />
         </div>
-        <p className="text-xs font-semibold tracking-wide text-gray-400 dark:text-zinc-500 uppercase text-center">
-          No jobs queued
+        <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500">
+          Queue is empty
         </p>
-        <p className="text-xs mt-1 text-center text-gray-400 dark:text-zinc-500 max-w-[200px]">
-          Paste a YouTube URL above to start
+        <p className="text-xs mt-1.5 text-gray-400 dark:text-zinc-600 max-w-[180px] leading-relaxed">
+          Paste a video, playlist, or channel URL above
         </p>
       </div>
     );
@@ -186,14 +186,10 @@ export default function JobQueue({
                 </p>
               )}
 
-              {(job.status === "processing" || job.status === "done") && (
+              {job.status === "processing" && (
                 <div className="mt-2 h-0.5 w-full rounded-full bg-gray-200 dark:bg-zinc-700 overflow-hidden">
                   <div
-                    className={`h-full transition-all duration-300 rounded-full ${
-                      job.status === "done"
-                        ? "bg-sky-500 dark:bg-sky-400"
-                        : "bg-emerald-500 dark:bg-emerald-400"
-                    }`}
+                    className="h-full transition-all duration-300 rounded-full bg-emerald-500 dark:bg-emerald-400"
                     style={{ width: `${job.progress}%` }}
                   />
                 </div>

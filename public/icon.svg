@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Paper -->
+  <rect x="5" y="3.5" width="22" height="24" rx="3" fill="white" stroke="#D1D5DB" stroke-width="1.15"/>
+  <!-- Transcript lines -->
+  <line x1="8.25" y1="8.2" x2="18.25" y2="8.2" stroke="#D1D5DB" stroke-width="0.95" stroke-linecap="round"/>
+  <line x1="8.25" y1="10.05" x2="14.75" y2="10.05" stroke="#D1D5DB" stroke-width="0.95" stroke-linecap="round"/>
+  <!-- YouTube-style play tile -->
+  <rect x="9" y="14.25" width="14" height="10" rx="2.6" fill="#FF0000"/>
+  <path d="M14.65 16.85v4.3L18.3 19l-3.65-2.15Z" fill="white"/>
+</svg>

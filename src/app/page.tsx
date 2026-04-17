@@ -15,6 +15,7 @@ import HomePageClient from "@/components/homepage-client";
 import { MarketingHeader } from "@/components/marketing-header";
 import { SiteFooter } from "@/components/site-footer";
 import { PricingCardsGrid } from "@/components/pricing-cards-grid";
+import { AuroraBackground } from "@/components/ui/aurora-background";
 import { AUTH_DISABLED } from "@/lib/auth-config";
 import { SITE_SHELL, siteFontStyle, sitePageClassName } from "@/lib/site-theme";
 
@@ -41,23 +42,22 @@ export default async function Home() {
       <MarketingHeader appUnlocked={appUnlocked} variant="full" />
 
       {/* Hero Section */}
-      <section className={`${SITE_SHELL} pt-28 sm:pt-32 pb-16 sm:pb-20`}>
+      <AuroraBackground className="w-full">
+      <section className={`${SITE_SHELL} pt-28 sm:pt-32 pb-16 sm:pb-20 relative z-10`}>
         <div className="max-w-3xl mx-auto text-center">
           {/* Eyebrow badge */}
-          <div className="inline-flex items-center gap-2 bg-gray-50 dark:bg-zinc-900 border border-gray-200/90 dark:border-zinc-700 rounded-full px-3.5 py-1.5 text-xs font-medium text-gray-500 dark:text-zinc-400 mb-7 sm:mb-8">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden />
-            {AUTH_DISABLED
-              ? "Auth off for testing — paste a link to try"
-              : "Sign in to extract transcripts"}
+          <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm border border-gray-200/90 dark:border-zinc-700 rounded-full px-3.5 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 mb-7 sm:mb-8">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" aria-hidden />
+            Free to use · No account required
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-[3.25rem] font-bold text-gray-900 dark:text-zinc-50 tracking-tight leading-[1.08] mb-5">
             Get YouTube transcripts
             <br />
-            <span className="text-gray-400 dark:text-zinc-500">instantly</span>
+            <span className="text-gray-600 dark:text-zinc-500">instantly</span>
           </h1>
 
-          <p className="text-base sm:text-lg text-gray-500 dark:text-zinc-400 max-w-xl mx-auto mb-9 sm:mb-10 leading-relaxed">
+          <p className="text-base sm:text-lg font-medium text-gray-800 dark:text-zinc-300 max-w-xl mx-auto mb-9 sm:mb-10 leading-relaxed">
             {AUTH_DISABLED
               ? "Paste a YouTube video, playlist, or channel link and open the app — no account required while testing."
               : "Paste a link and sign in to start. Free tier available after you create an account."}
@@ -77,9 +77,9 @@ export default async function Home() {
               ].map((feat) => (
                 <li
                   key={feat}
-                  className="flex items-start sm:items-center sm:justify-center gap-2 text-sm text-gray-500 dark:text-zinc-400"
+                  className="flex items-start sm:items-center sm:justify-center gap-2 text-sm font-medium text-gray-800 dark:text-zinc-300"
                 >
-                  <CheckCircle className="w-4 h-4 text-gray-300 dark:text-zinc-600 shrink-0 mt-0.5 sm:mt-0" aria-hidden />
+                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5 sm:mt-0" aria-hidden />
                   <span className="leading-snug">{feat}</span>
                 </li>
               ))}
@@ -87,6 +87,7 @@ export default async function Home() {
           </div>
         </div>
       </section>
+      </AuroraBackground>
 
       {/* How it works */}
       <section id="how-it-works" className="scroll-mt-28 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-950">
@@ -123,10 +124,10 @@ export default async function Home() {
                 key={item.step}
                 className="relative flex flex-col h-full bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-6 sm:p-7 shadow-sm hover:shadow-md hover:border-gray-200/80 dark:hover:border-zinc-700 transition-all"
               >
-                <div className="absolute top-5 right-5 text-xs font-mono font-semibold text-gray-200 dark:text-zinc-700 tabular-nums">
+                <div className="absolute top-5 right-5 text-xs font-mono font-bold text-gray-300 dark:text-zinc-600 tabular-nums">
                   {item.step}
                 </div>
-                <div className="w-10 h-10 bg-gray-50 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-gray-600 dark:text-zinc-300 mb-5 shrink-0">
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-5 shrink-0">
                   {item.iconName === "link2" ? <Link2 className="w-5 h-5" /> : item.iconName === "zap" ? <Zap className="w-5 h-5" /> : <FileDown className="w-5 h-5" />}
                 </div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-zinc-50 mb-2">{item.title}</h3>
@@ -153,28 +154,36 @@ export default async function Home() {
                 iconName: "zap",
                 title: "Paste & detect",
                 desc: "Instantly identifies video, playlist, or channel URLs. Zero configuration.",
+                iconBg: "bg-amber-50 dark:bg-amber-950/40",
+                iconColor: "text-amber-500 dark:text-amber-400",
               },
               {
                 iconName: "layers3",
                 title: "Bulk queue",
                 desc: "Queue hundreds of videos. Cherry-pick, drag to reorder, retry failures inline.",
+                iconBg: "bg-violet-50 dark:bg-violet-950/40",
+                iconColor: "text-violet-500 dark:text-violet-400",
               },
               {
                 iconName: "search",
                 title: "Cross-transcript search",
                 desc: "Search any keyword across all your transcripts at once, with timestamps surfaced.",
+                iconBg: "bg-sky-50 dark:bg-sky-950/40",
+                iconColor: "text-sky-500 dark:text-sky-400",
               },
               {
                 iconName: "download",
                 title: "Flexible export",
                 desc: "TXT, SRT, JSON, or CSV. Single video or ZIP archive for bulk jobs.",
+                iconBg: "bg-emerald-50 dark:bg-emerald-950/40",
+                iconColor: "text-emerald-500 dark:text-emerald-400",
               },
             ].map((feat) => (
               <div
                 key={feat.title}
                 className="flex gap-4 sm:gap-5 h-full bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl p-5 sm:p-6 shadow-sm hover:shadow-md hover:border-gray-200/80 dark:hover:border-zinc-700 transition-all"
               >
-                <div className="w-10 h-10 flex-shrink-0 bg-gray-50 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-gray-500 dark:text-zinc-400">
+                <div className={`w-10 h-10 flex-shrink-0 ${feat.iconBg} rounded-xl flex items-center justify-center ${feat.iconColor}`}>
                   {feat.iconName === "zap" ? <Zap className="w-4 h-4" /> : feat.iconName === "layers3" ? <Layers3 className="w-4 h-4" /> : feat.iconName === "search" ? <Search className="w-4 h-4" /> : <Download className="w-4 h-4" />}
                 </div>
                 <div className="min-w-0 flex-1 pt-0.5">
