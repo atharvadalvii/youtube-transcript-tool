@@ -9,14 +9,16 @@ import {
   Clock,
   Loader2,
   GripVertical,
+  X,
 } from "lucide-react";
 
 interface JobQueueProps {
   jobs: TranscriptJob[];
   selectedJobId: string | null;
-  onSelectJob: (id: string) => void;
+  onSelectJob: (id: string | null) => void;
   onRetryJob: (id: string) => void;
   onReorder: (from: number, to: number) => void;
+  onDeleteJob: (id: string) => void;
 }
 
 export default function JobQueue({
@@ -25,6 +27,7 @@ export default function JobQueue({
   onSelectJob,
   onRetryJob,
   onReorder,
+  onDeleteJob,
 }: JobQueueProps) {
   const dragRef = { current: -1 };
 
@@ -100,10 +103,11 @@ export default function JobQueue({
             onDragStart={(e) => handleDragStart(idx, e)}
             onDragOver={(e) => handleDragOver(idx, e)}
             onDrop={() => handleDrop(idx)}
-            onClick={() =>
-              (job.status === "done" || job.status === "failed") &&
-              onSelectJob(job.id)
-            }
+            onClick={() => {
+              if (job.status === "done" || job.status === "failed") {
+                onSelectJob(isSelected ? null : job.id);
+              }
+            }}
             className={`group relative flex items-start gap-3 p-3 transition-colors border-b border-gray-100 dark:border-zinc-800 ${
               job.status === "done" || job.status === "failed"
                 ? "cursor-pointer"
@@ -114,8 +118,21 @@ export default function JobQueue({
                 : "border-l-2 border-l-transparent hover:bg-white/60 dark:hover:bg-zinc-900/40"
             }`}
           >
-            <div className="flex-shrink-0 mt-1 opacity-0 group-hover:opacity-40 transition-opacity cursor-grab active:cursor-grabbing text-gray-400">
-              <GripVertical className="w-3.5 h-3.5" />
+            <div className="flex-shrink-0 flex flex-col items-center gap-1 mt-1">
+              <div className="opacity-0 group-hover:opacity-40 transition-opacity cursor-grab active:cursor-grabbing text-gray-400">
+                <GripVertical className="w-3.5 h-3.5" />
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteJob(job.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                title="Remove from queue"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </div>
 
             <div className="flex-shrink-0 relative">

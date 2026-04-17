@@ -243,6 +243,11 @@ export default function BulkScriptExtractor({
     });
   }, []);
 
+  const handleDeleteJob = useCallback((jobId: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    setSelectedJobId((prev) => (prev === jobId ? null : prev));
+  }, []);
+
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
   const completedJobs = jobs.filter((j) => j.status === "done");
   const hasPendingOrProcessing = jobs.some(
@@ -365,6 +370,7 @@ export default function BulkScriptExtractor({
             onSelectJob={setSelectedJobId}
             onRetryJob={handleRetryJob}
             onReorder={handleReorder}
+            onDeleteJob={handleDeleteJob}
           />
         </aside>
 
