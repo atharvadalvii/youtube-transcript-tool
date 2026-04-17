@@ -2,11 +2,23 @@ import { NextResponse } from "next/server";
 import { fetchTranscript } from "youtube-transcript";
 import { classifyTranscriptError } from "@/lib/youtube/transcript-errors";
 import { formatTimestamp } from "@/utils/bulkscript";
+import { rateLimit, getIp } from "@/lib/rate-limit";
 import type { TranscriptSegment } from "@/types/bulkscript";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const { allowed, retryAfterMs } = rateLimit(
+    `transcript:${getIp(req)}`,
+    60,        // 60 requests
+    60_000,    // per minute
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      { ok: false, error: "Too many requests. Please wait a moment.", reason: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) } },
+    );
+  }
   try {
     const body = (await req.json()) as { videoId?: string; lang?: string };
     const videoId = typeof body.videoId === "string" ? body.videoId.trim() : "";

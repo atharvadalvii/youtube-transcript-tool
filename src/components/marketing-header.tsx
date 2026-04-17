@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SITE_SHELL } from "@/lib/site-theme";
@@ -7,10 +6,9 @@ import { SITE_SHELL } from "@/lib/site-theme";
 type Variant = "full" | "minimal";
 
 export function MarketingHeader({
-  appUnlocked,
   variant = "full",
 }: {
-  appUnlocked: boolean;
+  appUnlocked?: boolean;
   variant?: Variant;
 }) {
   return (
@@ -30,64 +28,17 @@ export function MarketingHeader({
           <div className="hidden sm:flex items-center gap-1 md:gap-6">
             {variant === "full" ? (
               <>
-                <Link
-                  href="/#how-it-works"
-                  className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
-                >
+                <Link href="/#how-it-works" className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800">
                   How it works
                 </Link>
-                <Link
-                  href="/#features"
-                  className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
-                >
+                <Link href="/#features" className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800">
                   Features
                 </Link>
-                <Link
-                  href="/#pricing"
-                  className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
-                >
-                  Pricing
-                </Link>
               </>
             ) : (
-              <>
-                <Link
-                  href="/"
-                  className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
-                >
-                  Home
-                </Link>
-                <Link
-                  href="/pricing"
-                  className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800"
-                >
-                  Pricing
-                </Link>
-              </>
-            )}
-            {appUnlocked ? (
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-1.5 bg-black dark:bg-white text-white dark:text-black text-sm font-medium px-4 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-zinc-200 transition-colors"
-              >
-                Open App
-                <ArrowRight className="w-3.5 h-3.5" />
+              <Link href="/" className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors px-2 py-1 rounded-md hover:bg-gray-50 dark:hover:bg-zinc-800">
+                Home
               </Link>
-            ) : (
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/sign-in"
-                  className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/sign-up"
-                  className="flex items-center gap-1.5 bg-black dark:bg-white text-white dark:text-black text-sm font-medium px-4 py-2 rounded-full hover:bg-gray-800 dark:hover:bg-zinc-200 transition-colors"
-                >
-                  Get started free
-                </Link>
-              </div>
             )}
           </div>
         </div>

@@ -14,7 +14,6 @@ import {
 import HomePageClient from "@/components/homepage-client";
 import { MarketingHeader } from "@/components/marketing-header";
 import { SiteFooter } from "@/components/site-footer";
-import { PricingCardsGrid } from "@/components/pricing-cards-grid";
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { AUTH_DISABLED } from "@/lib/auth-config";
 import { SITE_SHELL, siteFontStyle, sitePageClassName } from "@/lib/site-theme";
@@ -27,16 +26,6 @@ export default async function Home() {
 
   const appUnlocked = AUTH_DISABLED || !!user;
 
-  let plans = null;
-  try {
-    const { data, error } = await supabase.functions.invoke(
-      "supabase-functions-get-plans",
-    );
-    if (!error) plans = data;
-  } catch {
-    // Edge function unavailable — fall through to static fallback pricing
-  }
-
   return (
     <div className={sitePageClassName} style={siteFontStyle}>
       <MarketingHeader appUnlocked={appUnlocked} variant="full" />
@@ -48,19 +37,17 @@ export default async function Home() {
           {/* Eyebrow badge */}
           <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm border border-gray-200/90 dark:border-zinc-700 rounded-full px-3.5 py-1.5 text-xs font-medium text-gray-600 dark:text-zinc-400 mb-7 sm:mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" aria-hidden />
-            Free to use · No account required
+            Free · No account · Works in seconds
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-[3.25rem] font-bold text-gray-900 dark:text-zinc-50 tracking-tight leading-[1.08] mb-5">
-            Get YouTube transcripts
+            Every word from any
             <br />
-            <span className="text-gray-600 dark:text-zinc-500">instantly</span>
+            <span className="text-gray-600 dark:text-zinc-500">YouTube video.</span>
           </h1>
 
           <p className="text-base sm:text-lg font-medium text-gray-800 dark:text-zinc-300 max-w-xl mx-auto mb-9 sm:mb-10 leading-relaxed">
-            {AUTH_DISABLED
-              ? "Paste a YouTube video, playlist, or channel link and open the app — no account required while testing."
-              : "Paste a link and sign in to start. Free tier available after you create an account."}
+            Paste a link — get a clean, searchable transcript in seconds. One video or a full playlist. Free, no sign-up.
           </p>
 
           {/* Input + CTA */}
@@ -68,19 +55,19 @@ export default async function Home() {
 
           {/* Trust row */}
           <div className="mt-10 sm:mt-12 pt-8 sm:pt-10 border-t border-gray-100 dark:border-zinc-800">
-            <ul className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 sm:gap-x-6 max-w-2xl mx-auto text-left sm:text-center">
+            <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
               {[
-                "Single videos",
-                "Full playlists",
-                "Entire channels",
+                "Any video, instantly",
+                "Entire playlists",
+                "Playlists up to 50 videos",
                 "TXT · SRT · JSON · CSV",
               ].map((feat) => (
                 <li
                   key={feat}
-                  className="flex items-start sm:items-center sm:justify-center gap-2 text-sm font-medium text-gray-800 dark:text-zinc-300"
+                  className="flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-zinc-300"
                 >
-                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5 sm:mt-0" aria-hidden />
-                  <span className="leading-snug">{feat}</span>
+                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" aria-hidden />
+                  {feat}
                 </li>
               ))}
             </ul>
@@ -95,7 +82,7 @@ export default async function Home() {
           <div className="text-center mb-12 sm:mb-16 max-w-2xl mx-auto">
             <p className="text-xs font-semibold tracking-[0.2em] text-gray-400 dark:text-zinc-500 uppercase mb-3">How it works</p>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-zinc-50 tracking-tight">
-              Three steps, seconds to results
+              Paste. Extract. Done.
             </h2>
           </div>
 
@@ -104,20 +91,20 @@ export default async function Home() {
               {
                 step: "01",
                 iconName: "link2",
-                title: "Paste your link",
-                desc: "Drop any YouTube URL — a single video, a full playlist, or an entire channel. We detect the type instantly.",
+                title: "Paste any YouTube link",
+                desc: "Video or playlist — drop the URL and we detect it instantly. No setup, no config.",
               },
               {
                 step: "02",
                 iconName: "zap",
-                title: "Generate transcript",
-                desc: "Our engine fetches and processes the transcript with timestamps and speaker labels in seconds.",
+                title: "Get the transcript in seconds",
+                desc: "Word-for-word text with timestamps, pulled instantly. No waiting, no manual work.",
               },
               {
                 step: "03",
                 iconName: "filedown",
-                title: "Download or export",
-                desc: "Export as TXT, SRT, JSON, or CSV. Bulk download as ZIP for playlists and channels.",
+                title: "Export in any format",
+                desc: "TXT, SRT, JSON, or CSV. Bulk download as a ZIP for playlists.",
               },
             ].map((item) => (
               <div
@@ -152,29 +139,29 @@ export default async function Home() {
             {[
               {
                 iconName: "zap",
-                title: "Paste & detect",
-                desc: "Instantly identifies video, playlist, or channel URLs. Zero configuration.",
+                title: "Works on anything",
+                desc: "Video or playlist — paste the URL and it just works. Auto-detected, zero config.",
                 iconBg: "bg-amber-50 dark:bg-amber-950/40",
                 iconColor: "text-amber-500 dark:text-amber-400",
               },
               {
                 iconName: "layers3",
-                title: "Bulk queue",
-                desc: "Queue hundreds of videos. Cherry-pick, drag to reorder, retry failures inline.",
+                title: "Bulk extract at scale",
+                desc: "Queue hundreds of videos at once. Cherry-pick what you want, reorder, retry failures — all inline.",
                 iconBg: "bg-violet-50 dark:bg-violet-950/40",
                 iconColor: "text-violet-500 dark:text-violet-400",
               },
               {
                 iconName: "search",
-                title: "Cross-transcript search",
-                desc: "Search any keyword across all your transcripts at once, with timestamps surfaced.",
+                title: "Search every word",
+                desc: "Find any keyword across all your transcripts instantly — with exact timestamps surfaced.",
                 iconBg: "bg-sky-50 dark:bg-sky-950/40",
                 iconColor: "text-sky-500 dark:text-sky-400",
               },
               {
                 iconName: "download",
-                title: "Flexible export",
-                desc: "TXT, SRT, JSON, or CSV. Single video or ZIP archive for bulk jobs.",
+                title: "Export how you want",
+                desc: "TXT, SRT, JSON, or CSV. One file or a full ZIP archive — your transcript, your format.",
                 iconBg: "bg-emerald-50 dark:bg-emerald-950/40",
                 iconColor: "text-emerald-500 dark:text-emerald-400",
               },
@@ -196,36 +183,21 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="scroll-mt-28 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-950">
-        <div className={`${SITE_SHELL} py-20 sm:py-28`}>
-          <div className="text-center mb-12 sm:mb-16 max-w-2xl mx-auto">
-            <p className="text-xs font-semibold tracking-[0.2em] text-gray-400 dark:text-zinc-500 uppercase mb-3">Pricing</p>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-zinc-50 tracking-tight">
-              Simple, honest pricing
-            </h2>
-            <p className="text-gray-500 dark:text-zinc-400 mt-3 text-base leading-relaxed">Start free. Upgrade when you need more.</p>
-          </div>
-
-          <PricingCardsGrid plans={plans} appUnlocked={appUnlocked} />
-        </div>
-      </section>
-
       {/* CTA Banner */}
       <section className="border-t border-gray-100 dark:border-zinc-800 bg-gray-950 dark:bg-black">
         <div className={`${SITE_SHELL} py-16 sm:py-20`}>
           <div className="max-w-2xl mx-auto text-center">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight mb-4">
-              Start extracting transcripts today
+              Your next transcript is 10 seconds away.
             </h2>
             <p className="text-gray-400 dark:text-zinc-500 mb-8 text-base leading-relaxed">
-              No credit card required. Get your first transcript in under 30 seconds.
+              No account. No credit card. Paste a link and go.
             </p>
             <Link
               href={appUnlocked ? "/dashboard" : "/sign-up"}
               className="inline-flex items-center justify-center gap-2 bg-white dark:bg-zinc-100 text-black dark:text-zinc-950 text-sm font-semibold px-6 py-3.5 rounded-full hover:bg-gray-100 dark:hover:bg-white transition-colors"
             >
-              Get started free
+              Try it free
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

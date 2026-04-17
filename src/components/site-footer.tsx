@@ -17,22 +17,13 @@ export function SiteFooter() {
             className="flex items-center justify-center gap-8 sm:gap-10"
             aria-label="Footer"
           >
-            <Link
-              href="#"
-              className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors"
-            >
+            <Link href="/about" className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors">
               About
             </Link>
-            <Link
-              href="#"
-              className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors"
-            >
+            <Link href="/privacy" className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors">
               Privacy
             </Link>
-            <Link
-              href="#"
-              className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors"
-            >
+            <Link href="/terms" className="text-sm text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-50 transition-colors">
               Terms
             </Link>
           </nav>

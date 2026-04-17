@@ -10,26 +10,51 @@ import {
   Loader2,
   GripVertical,
   X,
+  Trash2,
 } from "lucide-react";
 
 interface JobQueueProps {
   jobs: TranscriptJob[];
   selectedJobId: string | null;
+  checkedIds: Set<string>;
   onSelectJob: (id: string | null) => void;
+  onCheckChange: (ids: Set<string>) => void;
   onRetryJob: (id: string) => void;
   onReorder: (from: number, to: number) => void;
   onDeleteJob: (id: string) => void;
+  onDeleteJobs: (ids: string[]) => void;
 }
 
 export default function JobQueue({
   jobs,
   selectedJobId,
+  checkedIds: checked,
   onSelectJob,
+  onCheckChange,
   onRetryJob,
   onReorder,
   onDeleteJob,
+  onDeleteJobs,
 }: JobQueueProps) {
   const dragRef = { current: -1 };
+
+  function toggleCheck(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const next = new Set(checked);
+    next.has(id) ? next.delete(id) : next.add(id);
+    onCheckChange(next);
+  }
+
+  function toggleAll() {
+    onCheckChange(
+      checked.size === jobs.length ? new Set() : new Set(jobs.map((j) => j.id))
+    );
+  }
+
+  function deleteChecked() {
+    onDeleteJobs(Array.from(checked));
+    onCheckChange(new Set());
+  }
 
   function handleDragStart(idx: number, e: React.DragEvent) {
     dragRef.current = idx;
@@ -90,131 +115,202 @@ export default function JobQueue({
     );
   }
 
-  return (
-    <div className="flex-1 overflow-y-auto">
-      {jobs.map((job, idx) => {
-        const cfg = statusConfig[job.status];
-        const isSelected = job.id === selectedJobId;
+  const allChecked = checked.size === jobs.length;
+  const someChecked = checked.size > 0;
 
-        return (
-          <div
-            key={job.id}
-            draggable
-            onDragStart={(e) => handleDragStart(idx, e)}
-            onDragOver={(e) => handleDragOver(idx, e)}
-            onDrop={() => handleDrop(idx)}
-            onClick={() => {
-              if (job.status === "done" || job.status === "failed") {
-                onSelectJob(isSelected ? null : job.id);
-              }
-            }}
-            className={`group relative flex items-start gap-3 p-3 transition-colors border-b border-gray-100 dark:border-zinc-800 ${
-              job.status === "done" || job.status === "failed"
-                ? "cursor-pointer"
-                : "cursor-default"
-            } ${
-              isSelected
-                ? "bg-white dark:bg-zinc-900 border-l-2 border-l-gray-900 dark:border-l-zinc-100 pl-[10px]"
-                : "border-l-2 border-l-transparent hover:bg-white/60 dark:hover:bg-zinc-900/40"
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+      {/* Bulk action bar */}
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/60 dark:bg-zinc-900/40 flex-shrink-0">
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200 transition-colors"
+        >
+          <span
+            className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+              allChecked
+                ? "bg-gray-900 border-gray-900 dark:bg-zinc-100 dark:border-zinc-100"
+                : someChecked
+                ? "bg-gray-300 border-gray-400 dark:bg-zinc-600 dark:border-zinc-500"
+                : "border-gray-300 dark:border-zinc-600"
             }`}
           >
-            <div className="flex-shrink-0 flex flex-col items-center gap-1 mt-1">
-              <div className="opacity-0 group-hover:opacity-40 transition-opacity cursor-grab active:cursor-grabbing text-gray-400">
-                <GripVertical className="w-3.5 h-3.5" />
-              </div>
+            {(allChecked || someChecked) && (
+              <svg viewBox="0 0 10 10" className="w-2 h-2 text-white dark:text-zinc-900" fill="none" stroke="currentColor" strokeWidth="2">
+                {allChecked ? (
+                  <polyline points="1.5,5 4,7.5 8.5,2.5" />
+                ) : (
+                  <line x1="2" y1="5" x2="8" y2="5" />
+                )}
+              </svg>
+            )}
+          </span>
+          {someChecked ? `${checked.size} selected` : "Select all"}
+        </button>
+
+        {someChecked && (
+          <button
+            type="button"
+            onClick={deleteChecked}
+            className="ml-auto flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+          >
+            <Trash2 className="w-3 h-3" />
+            Remove {checked.size}
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {jobs.map((job, idx) => {
+          const cfg = statusConfig[job.status];
+          const isSelected = job.id === selectedJobId;
+          const isChecked = checked.has(job.id);
+
+          return (
+            <div
+              key={job.id}
+              draggable
+              onDragStart={(e) => handleDragStart(idx, e)}
+              onDragOver={(e) => handleDragOver(idx, e)}
+              onDrop={() => handleDrop(idx)}
+              onClick={() => {
+                if (job.status === "done" || job.status === "failed") {
+                  onSelectJob(isSelected ? null : job.id);
+                }
+              }}
+              className={`group relative flex items-start gap-2.5 p-3 transition-colors border-b border-gray-100 dark:border-zinc-800 ${
+                job.status === "done" || job.status === "failed"
+                  ? "cursor-pointer"
+                  : "cursor-default"
+              } ${
+                isChecked
+                  ? "bg-red-50/40 dark:bg-red-950/10"
+                  : isSelected
+                  ? "bg-white dark:bg-zinc-900 border-l-2 border-l-gray-900 dark:border-l-zinc-100 pl-[10px]"
+                  : "border-l-2 border-l-transparent hover:bg-white/60 dark:hover:bg-zinc-900/40"
+              }`}
+            >
+              {/* Checkbox */}
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteJob(job.id);
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
-                title="Remove from queue"
+                onClick={(e) => toggleCheck(job.id, e)}
+                className="flex-shrink-0 mt-1 flex items-center justify-center"
+                title="Select"
               >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-
-            <div className="flex-shrink-0 relative">
-              <img
-                src={job.thumbnailUrl}
-                alt=""
-                className="w-16 h-11 object-cover rounded-md border border-gray-200 dark:border-zinc-700"
-              />
-              {job.status === "processing" && (
-                <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/40">
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <p
-                className={`text-xs font-medium leading-snug truncate mb-1 ${
-                  isSelected
-                    ? "text-gray-900 dark:text-zinc-50"
-                    : "text-gray-700 dark:text-zinc-300"
-                }`}
-              >
-                {job.title}
-              </p>
-              <p className="text-xs truncate mb-1.5 text-gray-500 dark:text-zinc-400">
-                {job.channelName}
-              </p>
-
-              <div className="flex items-center gap-2 flex-wrap">
                 <span
-                  className={`flex items-center gap-1 text-[10px] font-semibold tracking-wide ${cfg.className}`}
+                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
+                    isChecked
+                      ? "bg-red-500 border-red-500"
+                      : "border-gray-300 dark:border-zinc-600 opacity-0 group-hover:opacity-100"
+                  }`}
                 >
-                  {cfg.icon}
-                  {cfg.label}
+                  {isChecked && (
+                    <svg viewBox="0 0 10 10" className="w-2 h-2 text-white" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="1.5,5 4,7.5 8.5,2.5" />
+                    </svg>
+                  )}
                 </span>
-                {job.status === "done" && job.wordCount > 0 && (
-                  <span className="text-[10px] text-gray-400 dark:text-zinc-500 tabular-nums">
-                    {job.wordCount.toLocaleString()} words
-                  </span>
-                )}
-                {job.status === "failed" && (
-                  <>
-                    <span
-                      className="text-[10px] font-medium text-amber-700 dark:text-amber-400/90 max-w-[140px] truncate"
-                      title={job.errorMessage}
-                    >
-                      {failureQueueLabel(job.failureReason ?? "unknown")}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRetryJob(job.id);
-                      }}
-                      className="flex items-center gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400 hover:underline"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Retry
-                    </button>
-                  </>
+              </button>
+
+              <div className="flex-shrink-0 flex flex-col items-center gap-1 mt-1">
+                <div className="opacity-0 group-hover:opacity-40 transition-opacity cursor-grab active:cursor-grabbing text-gray-400">
+                  <GripVertical className="w-3.5 h-3.5" />
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteJob(job.id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  title="Remove from queue"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="flex-shrink-0 relative">
+                <img
+                  src={job.thumbnailUrl}
+                  alt=""
+                  className="w-16 h-11 object-cover rounded-md border border-gray-200 dark:border-zinc-700"
+                />
+                {job.status === "processing" && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/40">
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  </div>
                 )}
               </div>
 
-              {job.status === "failed" && job.errorMessage && (
-                <p className="mt-1.5 text-[10px] leading-snug text-gray-500 dark:text-zinc-500 line-clamp-2">
-                  {job.errorMessage}
+              <div className="flex-1 min-w-0">
+                <p
+                  className={`text-xs font-medium leading-snug truncate mb-1 ${
+                    isSelected
+                      ? "text-gray-900 dark:text-zinc-50"
+                      : "text-gray-700 dark:text-zinc-300"
+                  }`}
+                >
+                  {job.title}
                 </p>
-              )}
+                <p className="text-xs truncate mb-1.5 text-gray-500 dark:text-zinc-400">
+                  {job.channelName}
+                </p>
 
-              {job.status === "processing" && (
-                <div className="mt-2 h-0.5 w-full rounded-full bg-gray-200 dark:bg-zinc-700 overflow-hidden">
-                  <div
-                    className="h-full transition-all duration-300 rounded-full bg-emerald-500 dark:bg-emerald-400"
-                    style={{ width: `${job.progress}%` }}
-                  />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`flex items-center gap-1 text-[10px] font-semibold tracking-wide ${cfg.className}`}
+                  >
+                    {cfg.icon}
+                    {cfg.label}
+                  </span>
+                  {job.status === "done" && job.wordCount > 0 && (
+                    <span className="text-[10px] text-gray-400 dark:text-zinc-500 tabular-nums">
+                      {job.wordCount.toLocaleString()} words
+                    </span>
+                  )}
+                  {job.status === "failed" && (
+                    <>
+                      <span
+                        className="text-[10px] font-medium text-amber-700 dark:text-amber-400/90 max-w-[140px] truncate"
+                        title={job.errorMessage}
+                      >
+                        {failureQueueLabel(job.failureReason ?? "unknown")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRetryJob(job.id);
+                        }}
+                        className="flex items-center gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400 hover:underline"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Retry
+                      </button>
+                    </>
+                  )}
                 </div>
-              )}
+
+                {job.status === "failed" && job.errorMessage && (
+                  <p className="mt-1.5 text-[10px] leading-snug text-gray-500 dark:text-zinc-500 line-clamp-2">
+                    {job.errorMessage}
+                  </p>
+                )}
+
+                {job.status === "processing" && (
+                  <div className="mt-2 h-0.5 w-full rounded-full bg-gray-200 dark:bg-zinc-700 overflow-hidden">
+                    <div
+                      className="h-full transition-all duration-300 rounded-full bg-emerald-500 dark:bg-emerald-400"
+                      style={{ width: `${job.progress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

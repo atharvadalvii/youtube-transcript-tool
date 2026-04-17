@@ -29,38 +29,43 @@ export default function BulkScriptExtractor({
 }: {
   initialUrl?: string;
 }) {
-  function loadFromStorage<T>(key: string, fallback: T): T {
-    if (typeof window === "undefined") return fallback;
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? (JSON.parse(raw) as T) : fallback;
-    } catch {
-      return fallback;
-    }
-  }
+  const DEFAULT_SETTINGS: ExtractorSettings = {
+    language: "en",
+    includeTimestamps: true,
+    speakerDetection: true,
+    rateLimitMs: 1000,
+  };
 
-  const [jobs, setJobs] = useState<TranscriptJob[]>(() =>
-    loadFromStorage<TranscriptJob[]>("yt_jobs", []).map((j) =>
-      j.status === "processing" || j.status === "pending"
-        ? { ...j, status: "failed" as const, failureReason: "unknown" as const, errorMessage: "Interrupted by page refresh." }
-        : j
-    )
-  );
+  // Start with server-safe defaults — localStorage is loaded after mount to avoid hydration mismatch.
+  const [jobs, setJobs] = useState<TranscriptJob[]>([]);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [scrollToSeconds, setScrollToSeconds] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [exportFormat, setExportFormat] = useState<ExportFormat>(
-    () => loadFromStorage<ExportFormat>("yt_export_format", "TXT")
-  );
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("TXT");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<ExtractorSettings>(() =>
-    loadFromStorage<ExtractorSettings>("yt_settings", {
-      language: "en",
-      includeTimestamps: true,
-      speakerDetection: true,
-      rateLimitMs: 1000,
-    })
-  );
+  const [settings, setSettings] = useState<ExtractorSettings>(DEFAULT_SETTINGS);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    function tryRead<T>(key: string, fallback: T): T {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) as T) : fallback;
+      } catch { return fallback; }
+    }
+
+    const savedJobs = tryRead<TranscriptJob[]>("yt_jobs", []).map((j) =>
+      j.status === "processing" || j.status === "pending"
+        ? { ...j, status: "failed" as const, failureReason: "unknown" as const, errorMessage: "Interrupted by page refresh." }
+        : j
+    );
+    setJobs(savedJobs);
+    setSettings(tryRead<ExtractorSettings>("yt_settings", DEFAULT_SETTINGS));
+    setExportFormat(tryRead<ExportFormat>("yt_export_format", "TXT"));
+    setHydrated(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const completedCount = jobs.filter((j) => j.status === "done").length;
 
@@ -75,18 +80,21 @@ export default function BulkScriptExtractor({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [completedCount]);
 
-  // Persist jobs, settings and format to localStorage
+  // Persist jobs, settings and format to localStorage (only after hydration to avoid overwriting saved state)
   useEffect(() => {
+    if (!hydrated) return;
     try { localStorage.setItem("yt_jobs", JSON.stringify(jobs)); } catch {}
-  }, [jobs]);
+  }, [jobs, hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
     try { localStorage.setItem("yt_settings", JSON.stringify(settings)); } catch {}
-  }, [settings]);
+  }, [settings, hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
     try { localStorage.setItem("yt_export_format", JSON.stringify(exportFormat)); } catch {}
-  }, [exportFormat]);
+  }, [exportFormat, hydrated]);
 
   // Serialize transcript fetching to avoid YouTube throttling/captcha on bulk playlists.
   const transcriptQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -246,6 +254,14 @@ export default function BulkScriptExtractor({
   const handleDeleteJob = useCallback((jobId: string) => {
     setJobs((prev) => prev.filter((j) => j.id !== jobId));
     setSelectedJobId((prev) => (prev === jobId ? null : prev));
+    setCheckedIds((prev) => { const next = new Set(prev); next.delete(jobId); return next; });
+  }, []);
+
+  const handleDeleteJobs = useCallback((jobIds: string[]) => {
+    const idSet = new Set(jobIds);
+    setJobs((prev) => prev.filter((j) => !idSet.has(j.id)));
+    setSelectedJobId((prev) => (prev && idSet.has(prev) ? null : prev));
+    setCheckedIds(new Set());
   }, []);
 
   const selectedJob = jobs.find((j) => j.id === selectedJobId) || null;
@@ -255,55 +271,47 @@ export default function BulkScriptExtractor({
   );
   const canBulkExport = completedJobs.length > 0 && !hasPendingOrProcessing;
 
+  // If the user has checked specific jobs, export only those (completed ones); otherwise export all completed.
+  const checkedCompletedJobs = completedJobs.filter((j) => checkedIds.has(j.id));
+  const exportJobs = checkedCompletedJobs.length > 0 ? checkedCompletedJobs : completedJobs;
+
+  const navbar = (
+    <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-sm flex-shrink-0 gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <Link href="/" className="flex items-center gap-2.5 min-w-0" aria-label="Home">
+          <BrandLogo size={30} className="text-gray-300 dark:text-zinc-600 shrink-0" />
+          <span className="text-sm font-semibold tracking-tight truncate">Transcript studio</span>
+        </Link>
+        <span className="hidden sm:inline-flex text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700">
+          Beta
+        </span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <ThemeToggle />
+        <Link
+          href="/pricing"
+          className="hidden sm:inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+        >
+          Pricing
+        </Link>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Settings</span>
+        </button>
+      </div>
+    </header>
+  );
+
   return (
     <div
       className="flex flex-col h-screen bg-white dark:bg-zinc-950 text-gray-900 dark:text-zinc-50 transition-colors"
       style={siteFontStyle}
     >
       <StatsBar jobs={jobs} />
-
-      <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-100 dark:border-zinc-800 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-sm flex-shrink-0 gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href="/"
-            className="flex items-center gap-2.5 min-w-0"
-            aria-label="Home"
-          >
-            <BrandLogo size={30} className="text-gray-300 dark:text-zinc-600 shrink-0" />
-            <div className="min-w-0">
-              <span className="text-sm font-semibold tracking-tight truncate block">
-                Transcript studio
-              </span>
-              <span className="text-[10px] text-gray-400 dark:text-zinc-500 truncate block sm:hidden">
-                YouTube Transcript Tool
-              </span>
-            </div>
-          </Link>
-          <span className="hidden sm:inline-flex text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 border border-gray-200 dark:border-zinc-700">
-            Beta
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <ThemeToggle />
-          <Link
-            href="/pricing"
-            className="hidden sm:inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
-          >
-            Pricing
-          </Link>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Settings</span>
-          </button>
-        </div>
-      </header>
-
-      <InputBar onExtract={handleExtract} initialUrl={initialUrl} />
 
       <GlobalSearch
         jobs={jobs}
@@ -315,79 +323,103 @@ export default function BulkScriptExtractor({
         }}
       />
 
-      <ExportToolbar
-        exportFormat={exportFormat}
-        onFormatChange={setExportFormat}
-        selectedJob={selectedJob}
-        completedJobs={completedJobs}
-        totalJobs={jobs.length}
-        canBulkExport={canBulkExport}
-        includeTimestamps={settings.includeTimestamps}
-      />
-
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        <aside className="flex flex-col w-[min(100%,340px)] min-w-[260px] sm:min-w-[280px] border-r border-gray-200 dark:border-zinc-800 bg-gray-50/40 dark:bg-zinc-900/30">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 flex-shrink-0 gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[10px] font-semibold tracking-wide text-gray-500 dark:text-zinc-400 uppercase shrink-0">
-                Queue
-              </span>
-              <span className="text-[10px] font-semibold tabular-nums text-gray-400 dark:text-zinc-500">
-                {jobs.length}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => completedCount > 0 && setSearchOpen(true)}
-                disabled={completedCount === 0}
-                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-zinc-300 hover:bg-gray-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                title="Search transcripts (⌘K)"
-              >
-                <Search className="w-3 h-3" />
-                Search
-                <kbd className="font-mono opacity-40 ml-0.5">⌘K</kbd>
-              </button>
-              {jobs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm("Clear all jobs? This cannot be undone.")) {
-                      setJobs([]);
-                      setSelectedJobId(null);
-                      try { localStorage.removeItem("yt_jobs"); } catch {}
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-zinc-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-950/30 dark:hover:text-red-400 transition-colors"
-                  title="Clear all jobs"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Clear
-                </button>
-              )}
+      {/* ── Empty state: centered hero ── */}
+      {hydrated && jobs.length === 0 ? (
+        <>
+          {navbar}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 pb-24">
+            <div className="w-full max-w-xl">
+              <div className="text-center mb-8">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-zinc-50 mb-2">
+                  Get YouTube transcripts
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-zinc-400">
+                  Paste a video, playlist, or channel link to get started.
+                </p>
+              </div>
+              <InputBar onExtract={handleExtract} initialUrl={initialUrl} variant="hero" />
             </div>
           </div>
+        </>
+      ) : (
+        /* ── Workspace: split pane ── */
+        <>
+          {navbar}
+          <InputBar onExtract={handleExtract} initialUrl={initialUrl} />
 
-          <JobQueue
-            jobs={jobs}
-            selectedJobId={selectedJobId}
-            onSelectJob={setSelectedJobId}
-            onRetryJob={handleRetryJob}
-            onReorder={handleReorder}
-            onDeleteJob={handleDeleteJob}
-          />
-        </aside>
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          <TranscriptPane
-            job={selectedJob}
+          <ExportToolbar
             exportFormat={exportFormat}
+            onFormatChange={setExportFormat}
+            completedJobs={exportJobs}
+            canBulkExport={canBulkExport}
             includeTimestamps={settings.includeTimestamps}
-            scrollToSeconds={scrollToSeconds}
-            onScrollHandled={() => setScrollToSeconds(null)}
+            selectionCount={checkedCompletedJobs.length}
           />
-        </div>
-      </div>
+
+          <div className="flex-1 flex overflow-hidden min-h-0">
+            <aside className="flex flex-col w-[min(100%,340px)] min-w-[260px] sm:min-w-[280px] border-r border-gray-200 dark:border-zinc-800 bg-gray-50/40 dark:bg-zinc-900/30">
+              <div className="flex items-center px-3 h-9 border-b border-gray-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 flex-shrink-0">
+                <span className="text-[10px] font-semibold tracking-widest text-gray-400 dark:text-zinc-500 uppercase">
+                  Queue
+                </span>
+                <span className="ml-1.5 text-[10px] font-semibold tabular-nums text-gray-300 dark:text-zinc-600">
+                  {jobs.length}
+                </span>
+                <div className="ml-auto flex items-center divide-x divide-gray-200 dark:divide-zinc-700 border border-gray-200 dark:border-zinc-700 rounded-md overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => completedCount > 0 && setSearchOpen(true)}
+                    disabled={completedCount === 0}
+                    className="flex items-center gap-1.5 px-2.5 h-6 text-[10px] font-medium text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800 hover:text-gray-800 dark:hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Search transcripts (⌘K)"
+                  >
+                    <Search className="w-3 h-3" />
+                    Search
+                    <kbd className="font-mono text-[9px] opacity-40">⌘K</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Clear all jobs? This cannot be undone.")) {
+                        setJobs([]);
+                        setSelectedJobId(null);
+                        try { localStorage.removeItem("yt_jobs"); } catch {}
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 h-6 text-[10px] font-medium text-gray-500 dark:text-zinc-400 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    title="Clear all jobs"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <JobQueue
+                jobs={jobs}
+                selectedJobId={selectedJobId}
+                checkedIds={checkedIds}
+                onSelectJob={setSelectedJobId}
+                onCheckChange={setCheckedIds}
+                onRetryJob={handleRetryJob}
+                onReorder={handleReorder}
+                onDeleteJob={handleDeleteJob}
+                onDeleteJobs={handleDeleteJobs}
+              />
+            </aside>
+
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+              <TranscriptPane
+                job={selectedJob}
+                exportFormat={exportFormat}
+                includeTimestamps={settings.includeTimestamps}
+                scrollToSeconds={scrollToSeconds}
+                onScrollHandled={() => setScrollToSeconds(null)}
+              />
+            </div>
+          </div>
+        </>
+      )}
 
       <SettingsDrawer
         isOpen={settingsOpen}

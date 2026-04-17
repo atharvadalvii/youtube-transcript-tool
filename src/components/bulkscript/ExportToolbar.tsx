@@ -4,45 +4,27 @@ import { useState } from "react";
 import JSZip from "jszip";
 import { ExportFormat, TranscriptJob } from "@/types/bulkscript";
 import { formatTranscript, downloadFile, getMimeType } from "@/utils/bulkscript";
-import { Download, Archive } from "lucide-react";
+import { Archive } from "lucide-react";
 
 interface ExportToolbarProps {
   exportFormat: ExportFormat;
   onFormatChange: (format: ExportFormat) => void;
-  selectedJob: TranscriptJob | null;
   completedJobs: TranscriptJob[];
-  totalJobs: number;
   canBulkExport: boolean;
   includeTimestamps: boolean;
+  selectionCount: number;
 }
 
 export default function ExportToolbar({
   exportFormat,
   onFormatChange,
-  selectedJob,
   completedJobs,
-  totalJobs,
   canBulkExport,
   includeTimestamps,
+  selectionCount,
 }: ExportToolbarProps) {
   const formats: ExportFormat[] = ["TXT", "SRT", "JSON", "CSV"];
   const [zipping, setZipping] = useState(false);
-
-  function handleSingleExport() {
-    if (!selectedJob || selectedJob.status !== "done") return;
-    const content = formatTranscript(
-      selectedJob.transcript,
-      exportFormat,
-      includeTimestamps,
-      selectedJob.title,
-    );
-    const ext = exportFormat.toLowerCase();
-    downloadFile(
-      content,
-      `${selectedJob.title.replace(/[^a-z0-9]/gi, "_")}.${ext}`,
-      getMimeType(exportFormat),
-    );
-  }
 
   async function handleBulkExport() {
     if (!canBulkExport || zipping) return;
@@ -114,22 +96,12 @@ export default function ExportToolbar({
       <div className="ml-auto flex items-center h-full">
         <button
           type="button"
-          onClick={handleSingleExport}
-          disabled={!selectedJob || selectedJob.status !== "done"}
-          className="flex items-center gap-1.5 h-full px-3 sm:px-4 text-[10px] sm:text-xs font-semibold tracking-wide text-gray-700 dark:text-zinc-300 border-l border-gray-200 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-900 disabled:opacity-30 transition-colors shrink-0"
-        >
-          <Download className="w-3.5 h-3.5" />
-          Export
-        </button>
-
-        <button
-          type="button"
           onClick={handleBulkExport}
           disabled={!canBulkExport || zipping}
           className="flex items-center gap-1.5 h-full px-3 sm:px-4 text-[10px] sm:text-xs font-semibold tracking-wide border-l border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900/80 text-gray-900 dark:text-zinc-100 hover:bg-gray-100 dark:hover:bg-zinc-800 disabled:opacity-30 transition-colors shrink-0"
         >
           <Archive className="w-3.5 h-3.5" />
-          {zipping ? "Zipping…" : `Bulk (${completedJobs.length}/${totalJobs})`}
+          {zipping ? "Zipping…" : selectionCount > 0 ? `Bulk · ${selectionCount} selected` : `Bulk · ${completedJobs.length} done`}
         </button>
       </div>
     </div>

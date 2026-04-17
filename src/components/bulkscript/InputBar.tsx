@@ -3,14 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { detectUrlType, normalizeYoutubeUrl } from "@/lib/youtube/url";
 import type { UrlType, DetectedInfo, VideoListItem } from "@/types/bulkscript";
-import {
-  ArrowRight,
-  Youtube,
-  List,
-  Layers,
-  Video,
-  X,
-} from "lucide-react";
+import { ArrowRight, Youtube, X, Video, List, Layers } from "lucide-react";
 
 interface InputBarProps {
   onExtract: (
@@ -19,11 +12,13 @@ interface InputBarProps {
     url: string,
   ) => void;
   initialUrl?: string;
+  variant?: "bar" | "hero";
 }
 
 export default function InputBar({
   onExtract,
   initialUrl = "",
+  variant = "bar",
 }: InputBarProps) {
   const [url, setUrl] = useState(initialUrl);
   const [urlType, setUrlType] = useState<UrlType>(null);
@@ -32,9 +27,6 @@ export default function InputBar({
   const [videoList, setVideoList] = useState<VideoListItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showVideoList, setShowVideoList] = useState(false);
-  const [activeTab, setActiveTab] = useState<"VIDEO" | "PLAYLIST" | "CHANNEL">(
-    "VIDEO",
-  );
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [resolvedUrl, setResolvedUrl] = useState("");
   const detectTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -109,16 +101,6 @@ export default function InputBar({
     }, 500);
   }, [url]);
 
-  function handleTabChange(tab: "VIDEO" | "PLAYLIST" | "CHANNEL") {
-    setActiveTab(tab);
-    setUrl("");
-    setUrlType(null);
-    setDetectedInfo(null);
-    setResolveError(null);
-    setResolvedUrl("");
-    setShowVideoList(false);
-  }
-
   function handleExtract() {
     if (!detectedInfo || !urlType) return;
     const sourceUrl = resolvedUrl || url.trim();
@@ -168,12 +150,6 @@ export default function InputBar({
     setSelectedIds(next);
   }
 
-  const tabHints: Record<string, string> = {
-    VIDEO: "https://youtube.com/watch?v=...",
-    PLAYLIST: "https://youtube.com/playlist?list=...",
-    CHANNEL: "https://youtube.com/@channelname",
-  };
-
   let hintType: UrlType = null;
   try {
     hintType = detectUrlType(normalizeYoutubeUrl(url.trim()));
@@ -190,36 +166,40 @@ export default function InputBar({
           ? "border-orange-500/60 dark:border-orange-400/50"
           : "border-gray-200 dark:border-zinc-700";
 
+  const detectorItems = [
+    { type: "VIDEO",    label: "Video",    icon: <Video className="w-3 h-3" />,   active: "text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40" },
+    { type: "PLAYLIST", label: "Playlist", icon: <List className="w-3 h-3" />,    active: "text-sky-600 dark:text-sky-400 border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40" },
+    { type: "CHANNEL",  label: "Channel",  icon: <Layers className="w-3 h-3" />,  active: "text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/40" },
+  ] as const;
+
   return (
-    <div className="border-b border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
-      <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-4 flex-wrap">
-        {(["VIDEO", "PLAYLIST", "CHANNEL"] as const).map((tab) => {
-          const icons = { VIDEO: Video, PLAYLIST: List, CHANNEL: Layers };
-          const Icon = icons[tab];
-          const isActive = activeTab === tab;
+    <div className={variant === "bar" ? "border-b border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950" : ""}>
+      {/* Type detector pills — read-only, light up on detection */}
+      <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-3">
+        {detectorItems.map(({ type, label, icon, active }) => {
+          const isActive = accentType === type;
           return (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => handleTabChange(tab)}
-              className={`flex items-center gap-2 px-3 py-1.5 text-[10px] sm:text-xs font-semibold tracking-wide rounded-full border transition-all ${
+            <span
+              key={type}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-semibold rounded-full border transition-all duration-200 ${
                 isActive
-                  ? "bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
-                  : "bg-transparent text-gray-500 dark:text-zinc-400 border-gray-200 dark:border-zinc-700 hover:border-gray-300 dark:hover:border-zinc-600"
+                  ? active
+                  : "text-gray-300 dark:text-zinc-600 border-gray-200 dark:border-zinc-800"
               }`}
             >
-              <Icon className="w-3 h-3" />
-              {tab}
-            </button>
+              {icon}
+              {label}
+            </span>
           );
         })}
+        {isDetecting && (
+          <div className="ml-1 w-3 h-3 border-2 border-gray-300 border-t-gray-600 dark:border-zinc-600 dark:border-t-zinc-300 rounded-full animate-spin" />
+        )}
       </div>
 
-      <div className="px-4 sm:px-6 py-4">
-        <div className="relative flex items-center">
-          <div className="absolute left-3 sm:left-4 flex items-center pointer-events-none text-gray-400 dark:text-zinc-500">
-            <Youtube className="w-5 h-5" />
-          </div>
+      <div className="px-4 sm:px-6 py-3">
+        <div className={`flex items-center gap-2 rounded-xl border bg-gray-50 dark:bg-zinc-900 px-3 sm:px-4 transition-colors ${borderAccent}`}>
+          <Youtube className="w-5 h-5 text-gray-400 dark:text-zinc-500 shrink-0" />
 
           <input
             type="text"
@@ -229,22 +209,11 @@ export default function InputBar({
               if (e.key === "Enter" && detectedInfo && !isDetecting)
                 handleExtract();
             }}
-            placeholder={tabHints[activeTab]}
-            className={`w-full pl-11 sm:pl-12 pr-28 sm:pr-36 py-3 sm:py-3.5 text-sm rounded-xl outline-none transition-colors bg-gray-50 dark:bg-zinc-900 border text-gray-900 dark:text-zinc-100 placeholder:text-gray-400 dark:placeholder:text-zinc-500 ${borderAccent}`}
+            placeholder="Paste a YouTube video, playlist, or channel URL…"
+            className="flex-1 min-w-0 py-3 sm:py-3.5 text-sm bg-transparent outline-none text-gray-900 dark:text-zinc-100 placeholder:text-gray-400 dark:placeholder:text-zinc-500"
           />
 
-          {urlType && !isDetecting && (
-            <div className="absolute right-24 sm:right-28 px-2 py-0.5 text-[10px] font-bold tracking-wide rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-200 border border-gray-200 dark:border-zinc-600">
-              {urlType}
-            </div>
-          )}
-          {isDetecting && (
-            <div className="absolute right-24 sm:right-28 flex items-center">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-900 dark:border-zinc-600 dark:border-t-zinc-100 rounded-full animate-spin" />
-            </div>
-          )}
-
-          {url ? (
+          {url && (
             <button
               type="button"
               onClick={() => {
@@ -256,18 +225,18 @@ export default function InputBar({
                 setResolvedUrl("");
                 setShowVideoList(false);
               }}
-              className="absolute right-20 sm:right-24 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200"
+              className="shrink-0 p-1 text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 transition-colors"
               aria-label="Clear URL"
             >
               <X className="w-4 h-4" />
             </button>
-          ) : null}
+          )}
 
           <button
             type="button"
             onClick={handleExtract}
             disabled={!detectedInfo || isDetecting}
-            className="absolute right-1 top-1 bottom-1 px-4 sm:px-5 flex items-center gap-1.5 text-xs font-semibold rounded-lg bg-black text-white dark:bg-white dark:text-black disabled:opacity-35 disabled:cursor-not-allowed hover:bg-gray-800 dark:hover:bg-zinc-200 transition-colors"
+            className="shrink-0 my-1.5 px-4 sm:px-5 py-2 flex items-center gap-1.5 text-xs font-semibold rounded-lg bg-black text-white dark:bg-white dark:text-black disabled:opacity-35 disabled:cursor-not-allowed hover:bg-gray-800 dark:hover:bg-zinc-200 transition-colors"
           >
             Extract
             <ArrowRight className="w-3.5 h-3.5" />
