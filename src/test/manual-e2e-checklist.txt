@@ -1,0 +1,37 @@
+Manual / E2E checks (run in browser against `npm run dev`)
+=========================================================
+
+URL parsing & resolve
+---------------------
+[ ] Standard watch URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+[ ] Short youtu.be link
+[ ] Shorts URL (/shorts/VIDEO_ID)
+[ ] Embed URL (/embed/VIDEO_ID)
+[ ] Watch URL that also has &list= → should treat as PLAYLIST (needs API key for items)
+[ ] Plain playlist URL (needs YOUTUBE_API_KEY in .env.local)
+[ ] @handle channel URL (needs API key)
+[ ] Invalid host / non-YouTube → clear error in UI
+[ ] Empty submit → blocked or validation message
+
+Transcript extraction
+---------------------
+[ ] Video with captions → transcript appears, word count > 0
+[ ] Video with no captions / disabled → “No captions” (queue + detail pane)
+[ ] Settings language with no matching track → “Wrong language” style message
+[ ] Retry on failed job → re-queues fetch
+
+Dashboard UX
+------------
+[ ] Navigate from home with pasted link → field prefilled once; address bar ends as /dashboard (no ?url=)
+[ ] Full reload on /dashboard → URL field empty (no sticky ?url=)
+[ ] Job queue: done vs failed labels; click failed row → detail message
+
+Exports
+-------
+[ ] TXT / SRT / JSON / CSV for single completed job
+[ ] Bulk TXT when multiple jobs done (single combined file)
+
+Performance / resilience (smoke)
+--------------------------------
+[ ] Large playlist: queue progresses without freezing UI (serialized fetches)
+[ ] Mix of success + no-caption videos → stats bar shows failed count / no-caption hint
