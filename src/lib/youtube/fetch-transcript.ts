@@ -110,6 +110,12 @@ async function getPlayerResponseFromPage(videoId: string): Promise<unknown> {
   if (!player) {
     throw new Error("Could not parse YouTube player data.");
   }
+  // @ts-ignore
+  const captionsObj = player?.captions;
+  console.log("[transcript] captions key present:", !!captionsObj);
+  // @ts-ignore
+  const trackList = captionsObj?.playerCaptionsTracklistRenderer?.captionTracks;
+  console.log("[transcript] raw trackList:", JSON.stringify(trackList)?.slice(0, 200));
   return player;
 }
 
