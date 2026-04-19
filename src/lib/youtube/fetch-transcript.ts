@@ -25,12 +25,10 @@ const WATCH_HEADERS = {
   Pragma: "no-cache",
 };
 
-function proxyUrl(target: string, sessionId?: string): string {
+function proxyUrl(target: string): string {
   const key = process.env.SCRAPERAPI_KEY;
   if (!key) return target;
-  let url = `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(target)}`;
-  if (sessionId) url += `&session_number=${sessionId}`;
-  return url;
+  return `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(target)}`;
 }
 
 // Extracts a top-level JSON object assigned to `varName` in a script block.
@@ -72,7 +70,7 @@ function extractJsonVar(html: string, varName: string): unknown | null {
 }
 
 async function getTimedTextTracks(videoId: string): Promise<CaptionTrack[]> {
-  const listUrl = proxyUrl(`https://www.youtube.com/api/timedtext?v=${videoId}&type=list`, videoId);
+  const listUrl = proxyUrl(`https://www.youtube.com/api/timedtext?v=${videoId}&type=list`);
   const res = await fetch(listUrl, {
     headers: {
       "User-Agent": WATCH_HEADERS["User-Agent"],
@@ -99,7 +97,7 @@ async function getTimedTextTracks(videoId: string): Promise<CaptionTrack[]> {
 }
 
 async function getPlayerResponseFromPage(videoId: string): Promise<unknown> {
-  const url = proxyUrl(`https://www.youtube.com/watch?v=${videoId}&hl=en`, videoId);
+  const url = proxyUrl(`https://www.youtube.com/watch?v=${videoId}&hl=en`);
   console.log("[transcript] fetching watch page via proxy:", url.slice(0, 80));
   const res = await fetch(url, { headers: WATCH_HEADERS });
   console.log("[transcript] watch page status:", res.status);
@@ -141,8 +139,8 @@ function pickTrack(tracks: CaptionTrack[], lang?: string): CaptionTrack | undefi
   );
 }
 
-async function fetchCaptionXml(baseUrl: string, sessionId?: string): Promise<string> {
-  const res = await fetch(proxyUrl(baseUrl, sessionId), {
+async function fetchCaptionXml(baseUrl: string): Promise<string> {
+  const res = await fetch(proxyUrl(baseUrl), {
     headers: {
       "User-Agent": WATCH_HEADERS["User-Agent"],
       Referer: "https://www.youtube.com/",
@@ -175,8 +173,8 @@ function parseCaptionXml(xml: string): TranscriptLine[] {
   return lines;
 }
 
-async function fetchJson3(url: string, sessionId?: string): Promise<TranscriptLine[]> {
-  const res = await fetch(proxyUrl(url, sessionId), {
+async function fetchJson3(url: string): Promise<TranscriptLine[]> {
+  const res = await fetch(proxyUrl(url), {
     headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
   });
   if (!res.ok) throw new Error(`Caption fetch returned ${res.status}`);
@@ -200,12 +198,12 @@ export async function fetchTranscriptCustom(
   if (timedTracks.length > 0) {
     const track = pickTrack(timedTracks, lang);
     if (track) {
-      const lines = await fetchJson3(track.baseUrl, videoId);
+      const lines = await fetchJson3(track.baseUrl);
       if (lines.length > 0) return lines;
     }
   }
 
-  // Fall back to watch page — use same ScraperAPI session so ei= token stays valid
+  // Fall back to watch page to discover available language codes
   const player = await getPlayerResponseFromPage(videoId);
   const tracks = extractCaptionTracks(player);
 
@@ -223,9 +221,10 @@ export async function fetchTranscriptCustom(
     throw new Error(`No transcripts are available in ${lang} for this video.`);
   }
 
-  console.log("[transcript] fetching caption:", track.baseUrl.slice(0, 80));
-  const xml = await fetchCaptionXml(track.baseUrl, videoId);
-  const lines = parseCaptionXml(xml);
+  // Use clean URL (no session tokens) — ScraperAPI residential IP is enough
+  const cleanUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${track.languageCode}&fmt=json3`;
+  console.log("[transcript] fetching clean caption url for lang:", track.languageCode);
+  const lines = await fetchJson3(cleanUrl);
 
   if (lines.length === 0) throw new Error("Could not load captions for this video.");
   return lines;
