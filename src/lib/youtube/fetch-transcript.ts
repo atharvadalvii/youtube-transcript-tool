@@ -244,9 +244,16 @@ export async function fetchTranscriptCustom(
   }
 
   // baseUrl contains ip=0.0.0.0 — not IP-restricted, fetch directly without proxy
-  const captionUrl = `${track.baseUrl}&fmt=json3`;
-  console.log("[transcript] fetching caption directly (no proxy):", captionUrl.slice(0, 80));
-  const lines = await fetchJson3Direct(captionUrl);
+  // Do NOT append params — sparams signs the existing params and extra ones break it
+  console.log("[transcript] fetching caption directly (no proxy):", track.baseUrl.slice(0, 80));
+  const captionRes = await fetch(track.baseUrl, {
+    headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
+  });
+  console.log("[transcript] caption status:", captionRes.status);
+  if (!captionRes.ok) throw new Error(`Caption fetch returned ${captionRes.status}`);
+  const captionText = await captionRes.text();
+  console.log("[transcript] caption length:", captionText.length, "snippet:", captionText.slice(0, 80));
+  const lines = parseCaptionXml(captionText);
 
   if (lines.length === 0) throw new Error("Could not load captions for this video.");
   return lines;
