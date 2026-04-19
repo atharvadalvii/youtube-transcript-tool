@@ -27,6 +27,7 @@ const WATCH_HEADERS = {
 
 function proxyUrl(target: string): string {
   const key = process.env.SCRAPERAPI_KEY;
+  console.log("[transcript] SCRAPERAPI_KEY set:", !!key, "target:", target.slice(0, 60));
   if (!key) return target;
   return `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(target)}`;
 }
@@ -98,13 +99,16 @@ async function getTimedTextTracks(videoId: string): Promise<CaptionTrack[]> {
 
 async function getPlayerResponseFromPage(videoId: string): Promise<unknown> {
   const url = proxyUrl(`https://www.youtube.com/watch?v=${videoId}&hl=en`);
+  console.log("[transcript] fetching watch page via proxy:", url.slice(0, 80));
   const res = await fetch(url, { headers: WATCH_HEADERS });
+  console.log("[transcript] watch page status:", res.status);
   if (!res.ok) throw new Error(`YouTube watch page returned ${res.status}`);
   const html = await res.text();
+  console.log("[transcript] html length:", html.length, "snippet:", html.slice(0, 120));
 
   const player = extractJsonVar(html, "ytInitialPlayerResponse");
+  console.log("[transcript] player found:", !!player);
   if (!player) {
-    console.error("[transcript] ytInitialPlayerResponse not found in page");
     throw new Error("Could not parse YouTube player data.");
   }
   return player;
