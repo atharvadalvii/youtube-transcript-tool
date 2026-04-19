@@ -243,10 +243,9 @@ export async function fetchTranscriptCustom(
     throw new Error(`No transcripts are available in ${lang} for this video.`);
   }
 
-  // baseUrl contains ip=0.0.0.0 — not IP-restricted, fetch directly without proxy
-  // Do NOT append params — sparams signs the existing params and extra ones break it
-  console.log("[transcript] fetching caption directly (no proxy):", track.baseUrl.slice(0, 80));
-  const captionRes = await fetch(track.baseUrl, {
+  // Fetch signed baseUrl through ScraperAPI — YouTube blocks Vercel IPs even for signed URLs
+  console.log("[transcript] fetching caption via proxy:", track.baseUrl.slice(0, 80));
+  const captionRes = await fetch(proxyUrl(track.baseUrl), {
     headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
   });
   console.log("[transcript] caption status:", captionRes.status);
