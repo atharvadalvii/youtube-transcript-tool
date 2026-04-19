@@ -10,51 +10,77 @@ interface CaptionTrack {
   kind?: string;
 }
 
+const WATCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
+  "Cache-Control": "no-cache",
+  Pragma: "no-cache",
+};
 
-async function getPlayerResponse(videoId: string): Promise<unknown> {
-  const res = await fetch(
-    "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "X-YouTube-Client-Name": "1",
-        "X-YouTube-Client-Version": "2.20240101.00.00",
-        Origin: "https://www.youtube.com",
-        Referer: "https://www.youtube.com/",
-      },
-      body: JSON.stringify({
-        videoId,
-        context: {
-          client: {
-            clientName: "WEB",
-            clientVersion: "2.20240101.00.00",
-            hl: "en",
-            gl: "US",
-          },
-        },
-      }),
+// Extracts a top-level JSON object assigned to `varName` in a script block.
+// Uses bracket balancing so nested objects are handled correctly.
+function extractJsonVar(html: string, varName: string): unknown | null {
+  const needle = `"${varName}"`;
+  let idx = html.indexOf(needle);
+  // Also try without quotes (var assignment)
+  if (idx === -1) idx = html.indexOf(`${varName} =`);
+  if (idx === -1) idx = html.indexOf(`${varName}=`);
+  if (idx === -1) return null;
+
+  const start = html.indexOf("{", idx);
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < html.length; i++) {
+    const ch = html[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\" && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") depth++;
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(html.slice(start, i + 1));
+        } catch {
+          return null;
+        }
+      }
     }
-  );
-  if (!res.ok) throw new Error(`InnerTube returned ${res.status}`);
-  const data = await res.json();
-  console.log("[transcript] player keys:", Object.keys(data));
-  console.log("[transcript] captions present:", !!data?.captions);
-  if (data?.captions) {
-    console.log("[transcript] captions keys:", Object.keys(data.captions));
   }
-  return data;
+  return null;
+}
+
+async function getPlayerResponseFromPage(videoId: string): Promise<unknown> {
+  const url = `https://www.youtube.com/watch?v=${videoId}&hl=en`;
+  const res = await fetch(url, { headers: WATCH_HEADERS });
+  if (!res.ok) throw new Error(`YouTube watch page returned ${res.status}`);
+  const html = await res.text();
+
+  const player = extractJsonVar(html, "ytInitialPlayerResponse");
+  if (!player) {
+    console.error("[transcript] ytInitialPlayerResponse not found in page");
+    throw new Error("Could not parse YouTube player data.");
+  }
+  return player;
 }
 
 function extractCaptionTracks(playerResponse: unknown): CaptionTrack[] {
   try {
-    const tracks =
-      (playerResponse as Record<string, unknown>)?.captions
-        // @ts-ignore
-        ?.playerCaptionsTracklistRenderer?.captionTracks;
+    // @ts-ignore
+    const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
     if (!Array.isArray(tracks)) return [];
     return tracks as CaptionTrack[];
   } catch {
@@ -62,12 +88,8 @@ function extractCaptionTracks(playerResponse: unknown): CaptionTrack[] {
   }
 }
 
-function pickTrack(
-  tracks: CaptionTrack[],
-  lang?: string
-): CaptionTrack | undefined {
+function pickTrack(tracks: CaptionTrack[], lang?: string): CaptionTrack | undefined {
   if (!lang) {
-    // prefer manual (non-asr) english, then any manual, then first
     return (
       tracks.find((t) => t.languageCode.startsWith("en") && t.kind !== "asr") ??
       tracks.find((t) => t.kind !== "asr") ??
@@ -84,8 +106,7 @@ function pickTrack(
 async function fetchCaptionXml(baseUrl: string): Promise<string> {
   const res = await fetch(baseUrl, {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "User-Agent": WATCH_HEADERS["User-Agent"],
       Referer: "https://www.youtube.com/",
     },
   });
@@ -98,7 +119,7 @@ function parseCaptionXml(xml: string): TranscriptLine[] {
   const re = /<text start="([^"]+)" dur="([^"]+)"[^>]*>([\s\S]*?)<\/text>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) {
-    const offset = parseFloat(m[1]) * 1000; // convert to ms for consistency
+    const offset = parseFloat(m[1]) * 1000;
     const duration = parseFloat(m[2]) * 1000;
     const text = m[3]
       .replace(/&amp;/g, "&")
@@ -117,21 +138,23 @@ export async function fetchTranscriptCustom(
   videoId: string,
   lang?: string
 ): Promise<TranscriptLine[]> {
-  const player = await getPlayerResponse(videoId);
+  const player = await getPlayerResponseFromPage(videoId);
   const tracks = extractCaptionTracks(player);
 
   if (tracks.length === 0) {
-    // Log the player response shape to help debug
-    const keys = Object.keys(player as object);
-    console.error("[transcript] no caption tracks. player keys:", keys);
+    // @ts-ignore
+    const status = player?.playabilityStatus?.status;
+    // @ts-ignore
+    const reason = player?.playabilityStatus?.reason;
+    console.error("[transcript] no tracks. playabilityStatus:", status, reason);
     throw new Error("No transcripts are available for this video.");
   }
 
+  console.log("[transcript] found tracks:", tracks.map((t) => `${t.languageCode}(${t.kind ?? "manual"})`));
+
   const track = pickTrack(tracks, lang);
   if (!track) {
-    throw new Error(
-      `No transcripts are available in ${lang} for this video.`
-    );
+    throw new Error(`No transcripts are available in ${lang} for this video.`);
   }
 
   const xml = await fetchCaptionXml(track.baseUrl);
