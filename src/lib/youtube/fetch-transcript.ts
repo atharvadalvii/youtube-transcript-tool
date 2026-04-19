@@ -147,8 +147,11 @@ async function fetchCaptionXml(baseUrl: string): Promise<string> {
       Referer: "https://www.youtube.com/",
     },
   });
+  console.log("[transcript] caption fetch status:", res.status);
   if (!res.ok) throw new Error(`Caption fetch returned ${res.status}`);
-  return res.text();
+  const text = await res.text();
+  console.log("[transcript] caption length:", text.length, "snippet:", text.slice(0, 120));
+  return text;
 }
 
 function parseCaptionXml(xml: string): TranscriptLine[] {
