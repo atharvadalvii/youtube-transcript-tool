@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchTranscriptCustom } from "@/lib/youtube/fetch-transcript";
+import { fetchTranscript } from "youtube-transcript";
 import { classifyTranscriptError } from "@/lib/youtube/transcript-errors";
 import { formatTimestamp } from "@/utils/bulkscript";
 import { rateLimit, getIp } from "@/lib/rate-limit";
@@ -8,11 +8,32 @@ import type { TranscriptSegment } from "@/types/bulkscript";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function withScraperProxy<T>(fn: () => Promise<T>): Promise<T> {
+  const key = process.env.SCRAPERAPI_KEY;
+  if (!key) return fn();
+
+  const original = globalThis.fetch;
+  // @ts-ignore
+  globalThis.fetch = (url: RequestInfo | URL, init?: RequestInit) => {
+    const urlStr = url.toString();
+    if (urlStr.includes("youtube.com") || urlStr.includes("googlevideo.com")) {
+      const proxied = `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(urlStr)}&autoparse=false`;
+      console.log("[transcript] proxying:", urlStr.slice(0, 80));
+      return original(proxied, init);
+    }
+    return original(url, init);
+  };
+
+  return fn().finally(() => {
+    globalThis.fetch = original;
+  });
+}
+
 export async function POST(req: Request) {
   const { allowed, retryAfterMs } = rateLimit(
     `transcript:${getIp(req)}`,
-    60,        // 60 requests
-    60_000,    // per minute
+    60,
+    60_000,
   );
   if (!allowed) {
     return NextResponse.json(
@@ -34,11 +55,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const raw = await fetchTranscriptCustom(videoId, lang);
+    const raw = await withScraperProxy(() =>
+      fetchTranscript(videoId, lang ? { lang } : undefined)
+    );
 
-    // fetchTranscriptCustom returns offset in ms
     const segments: TranscriptSegment[] = raw.map((line) => {
-      const startSeconds = line.offset / 1000;
+      const offsetLikelyMs = raw.some(l => l.offset >= 1000 && Number.isInteger(l.offset));
+      const startSeconds = offsetLikelyMs ? line.offset / 1000 : line.offset;
       return {
         timestamp: formatTimestamp(startSeconds),
         startSeconds,
