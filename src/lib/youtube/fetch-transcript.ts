@@ -179,6 +179,22 @@ function parseCaptionXml(xml: string): TranscriptLine[] {
   return lines;
 }
 
+async function fetchJson3Direct(url: string): Promise<TranscriptLine[]> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
+  });
+  if (!res.ok) throw new Error(`Caption fetch returned ${res.status}`);
+  const data = await res.json() as { events?: Array<{ tStartMs?: number; dDurationMs?: number; segs?: Array<{ utf8?: string }> }> };
+  const lines: TranscriptLine[] = [];
+  for (const event of data.events ?? []) {
+    if (!event.segs) continue;
+    const text = event.segs.map(s => s.utf8 ?? "").join("").trim();
+    if (!text || text === "\n") continue;
+    lines.push({ text, offset: event.tStartMs ?? 0, duration: event.dDurationMs ?? 0 });
+  }
+  return lines;
+}
+
 async function fetchJson3(url: string): Promise<TranscriptLine[]> {
   const res = await fetch(proxyUrl(url), {
     headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
@@ -227,10 +243,10 @@ export async function fetchTranscriptCustom(
     throw new Error(`No transcripts are available in ${lang} for this video.`);
   }
 
-  // Use clean URL (no session tokens) — ScraperAPI residential IP is enough
-  const cleanUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${track.languageCode}&fmt=json3`;
-  console.log("[transcript] fetching clean caption url for lang:", track.languageCode);
-  const lines = await fetchJson3(cleanUrl);
+  // baseUrl contains ip=0.0.0.0 — not IP-restricted, fetch directly without proxy
+  const captionUrl = `${track.baseUrl}&fmt=json3`;
+  console.log("[transcript] fetching caption directly (no proxy):", captionUrl.slice(0, 80));
+  const lines = await fetchJson3Direct(captionUrl);
 
   if (lines.length === 0) throw new Error("Could not load captions for this video.");
   return lines;
