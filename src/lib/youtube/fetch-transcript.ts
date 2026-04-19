@@ -25,10 +25,11 @@ const WATCH_HEADERS = {
   Pragma: "no-cache",
 };
 
-function proxyUrl(target: string): string {
+function proxyUrl(target: string, raw = false): string {
   const key = process.env.SCRAPERAPI_KEY;
   if (!key) return target;
-  return `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(target)}`;
+  const base = `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(target)}`;
+  return raw ? `${base}&autoparse=false` : base;
 }
 
 // Extracts a top-level JSON object assigned to `varName` in a script block.
@@ -245,7 +246,7 @@ export async function fetchTranscriptCustom(
 
   // Fetch signed baseUrl through ScraperAPI — YouTube blocks Vercel IPs even for signed URLs
   console.log("[transcript] fetching caption via proxy:", track.baseUrl.slice(0, 80));
-  const captionRes = await fetch(proxyUrl(track.baseUrl), {
+  const captionRes = await fetch(proxyUrl(track.baseUrl, true), {
     headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
   });
   console.log("[transcript] caption status:", captionRes.status);
