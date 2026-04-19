@@ -25,6 +25,12 @@ const WATCH_HEADERS = {
   Pragma: "no-cache",
 };
 
+function proxyUrl(target: string): string {
+  const key = process.env.SCRAPERAPI_KEY;
+  if (!key) return target;
+  return `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(target)}`;
+}
+
 // Extracts a top-level JSON object assigned to `varName` in a script block.
 // Uses bracket balancing so nested objects are handled correctly.
 function extractJsonVar(html: string, varName: string): unknown | null {
@@ -64,7 +70,7 @@ function extractJsonVar(html: string, varName: string): unknown | null {
 }
 
 async function getTimedTextTracks(videoId: string): Promise<CaptionTrack[]> {
-  const listUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&type=list`;
+  const listUrl = proxyUrl(`https://www.youtube.com/api/timedtext?v=${videoId}&type=list`);
   const res = await fetch(listUrl, {
     headers: {
       "User-Agent": WATCH_HEADERS["User-Agent"],
@@ -91,7 +97,7 @@ async function getTimedTextTracks(videoId: string): Promise<CaptionTrack[]> {
 }
 
 async function getPlayerResponseFromPage(videoId: string): Promise<unknown> {
-  const url = `https://www.youtube.com/watch?v=${videoId}&hl=en`;
+  const url = proxyUrl(`https://www.youtube.com/watch?v=${videoId}&hl=en`);
   const res = await fetch(url, { headers: WATCH_HEADERS });
   if (!res.ok) throw new Error(`YouTube watch page returned ${res.status}`);
   const html = await res.text();
@@ -131,7 +137,7 @@ function pickTrack(tracks: CaptionTrack[], lang?: string): CaptionTrack | undefi
 }
 
 async function fetchCaptionXml(baseUrl: string): Promise<string> {
-  const res = await fetch(baseUrl, {
+  const res = await fetch(proxyUrl(baseUrl), {
     headers: {
       "User-Agent": WATCH_HEADERS["User-Agent"],
       Referer: "https://www.youtube.com/",
@@ -162,7 +168,7 @@ function parseCaptionXml(xml: string): TranscriptLine[] {
 }
 
 async function fetchJson3(url: string): Promise<TranscriptLine[]> {
-  const res = await fetch(url, {
+  const res = await fetch(proxyUrl(url), {
     headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
   });
   if (!res.ok) throw new Error(`Caption fetch returned ${res.status}`);
