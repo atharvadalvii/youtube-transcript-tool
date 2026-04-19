@@ -12,34 +12,41 @@ interface CaptionTrack {
 
 
 async function getPlayerResponse(videoId: string): Promise<unknown> {
-  const IOS_UA =
-    "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)";
-
-  const res = await fetch("https://www.youtube.com/youtubei/v1/player", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": IOS_UA,
-      "X-YouTube-Client-Name": "5",
-      "X-YouTube-Client-Version": "19.29.1",
-      Origin: "https://www.youtube.com",
-    },
-    body: JSON.stringify({
-      videoId,
-      context: {
-        client: {
-          clientName: "IOS",
-          clientVersion: "19.29.1",
-          deviceModel: "iPhone16,2",
-          userAgent: IOS_UA,
-          hl: "en",
-          gl: "US",
-        },
+  const res = await fetch(
+    "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "X-YouTube-Client-Name": "1",
+        "X-YouTube-Client-Version": "2.20240101.00.00",
+        Origin: "https://www.youtube.com",
+        Referer: "https://www.youtube.com/",
       },
-    }),
-  });
+      body: JSON.stringify({
+        videoId,
+        context: {
+          client: {
+            clientName: "WEB",
+            clientVersion: "2.20240101.00.00",
+            hl: "en",
+            gl: "US",
+          },
+        },
+      }),
+    }
+  );
   if (!res.ok) throw new Error(`InnerTube returned ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  console.log("[transcript] player keys:", Object.keys(data));
+  console.log("[transcript] captions present:", !!data?.captions);
+  if (data?.captions) {
+    console.log("[transcript] captions keys:", Object.keys(data.captions));
+  }
+  return data;
 }
 
 function extractCaptionTracks(playerResponse: unknown): CaptionTrack[] {
