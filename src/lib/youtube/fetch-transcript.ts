@@ -63,6 +63,33 @@ function extractJsonVar(html: string, varName: string): unknown | null {
   return null;
 }
 
+async function getTimedTextTracks(videoId: string): Promise<CaptionTrack[]> {
+  const listUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&type=list`;
+  const res = await fetch(listUrl, {
+    headers: {
+      "User-Agent": WATCH_HEADERS["User-Agent"],
+      Referer: "https://www.youtube.com/",
+    },
+  });
+  if (!res.ok) return [];
+  const xml = await res.text();
+  const tracks: CaptionTrack[] = [];
+  const re = /<track[^>]+id="(\d+)"[^>]+name="([^"]*)"[^>]+lang_code="([^"]+)"[^>]*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const id = m[1];
+    const name = m[2];
+    const lang = m[3];
+    tracks.push({
+      baseUrl: `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&name=${encodeURIComponent(name)}&fmt=json3`,
+      languageCode: lang,
+      kind: name === "" ? "asr" : "manual",
+    });
+  }
+  console.log("[transcript] timedtext tracks:", tracks.map(t => t.languageCode));
+  return tracks;
+}
+
 async function getPlayerResponseFromPage(videoId: string): Promise<unknown> {
   const url = `https://www.youtube.com/watch?v=${videoId}&hl=en`;
   const res = await fetch(url, { headers: WATCH_HEADERS });
@@ -134,10 +161,37 @@ function parseCaptionXml(xml: string): TranscriptLine[] {
   return lines;
 }
 
+async function fetchJson3(url: string): Promise<TranscriptLine[]> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": WATCH_HEADERS["User-Agent"], Referer: "https://www.youtube.com/" },
+  });
+  if (!res.ok) throw new Error(`Caption fetch returned ${res.status}`);
+  const data = await res.json() as { events?: Array<{ tStartMs?: number; dDurationMs?: number; segs?: Array<{ utf8?: string }> }> };
+  const lines: TranscriptLine[] = [];
+  for (const event of data.events ?? []) {
+    if (!event.segs) continue;
+    const text = event.segs.map(s => s.utf8 ?? "").join("").trim();
+    if (!text || text === "\n") continue;
+    lines.push({ text, offset: event.tStartMs ?? 0, duration: event.dDurationMs ?? 0 });
+  }
+  return lines;
+}
+
 export async function fetchTranscriptCustom(
   videoId: string,
   lang?: string
 ): Promise<TranscriptLine[]> {
+  // Try the older /api/timedtext endpoint first — less bot-detection
+  const timedTracks = await getTimedTextTracks(videoId);
+  if (timedTracks.length > 0) {
+    const track = pickTrack(timedTracks, lang);
+    if (track) {
+      const lines = await fetchJson3(track.baseUrl);
+      if (lines.length > 0) return lines;
+    }
+  }
+
+  // Fall back to watch page parsing
   const player = await getPlayerResponseFromPage(videoId);
   const tracks = extractCaptionTracks(player);
 
@@ -150,8 +204,6 @@ export async function fetchTranscriptCustom(
     throw new Error("No transcripts are available for this video.");
   }
 
-  console.log("[transcript] found tracks:", tracks.map((t) => `${t.languageCode}(${t.kind ?? "manual"})`));
-
   const track = pickTrack(tracks, lang);
   if (!track) {
     throw new Error(`No transcripts are available in ${lang} for this video.`);
@@ -160,9 +212,6 @@ export async function fetchTranscriptCustom(
   const xml = await fetchCaptionXml(track.baseUrl);
   const lines = parseCaptionXml(xml);
 
-  if (lines.length === 0) {
-    throw new Error("Could not load captions for this video.");
-  }
-
+  if (lines.length === 0) throw new Error("Could not load captions for this video.");
   return lines;
 }
