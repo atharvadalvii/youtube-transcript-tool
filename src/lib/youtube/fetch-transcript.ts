@@ -10,50 +10,21 @@ interface CaptionTrack {
   kind?: string;
 }
 
-const BROWSER_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-  "Accept-Language": "en-US,en;q=0.9",
-  "Accept-Encoding": "gzip, deflate, br",
-  Connection: "keep-alive",
-  "Upgrade-Insecure-Requests": "1",
-  "Sec-Fetch-Dest": "document",
-  "Sec-Fetch-Mode": "navigate",
-  "Sec-Fetch-Site": "none",
-  "Sec-Fetch-User": "?1",
-  "Cache-Control": "max-age=0",
-};
 
 async function getPlayerResponse(videoId: string): Promise<unknown> {
-  const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-    headers: BROWSER_HEADERS,
-  });
-
-  if (!res.ok) throw new Error(`YouTube returned ${res.status}`);
-
-  const html = await res.text();
-
-  const match = html.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;/s);
-  if (match) {
-    try {
-      return JSON.parse(match[1]);
-    } catch {
-      // fall through to InnerTube
-    }
-  }
-
-  // Fallback: InnerTube API
-  const innertube = await fetch(
-    "https://www.youtube.com/youtubei/v1/player?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+  const res = await fetch(
+    "https://www.youtube.com/youtubei/v1/player",
     {
       method: "POST",
       headers: {
-        ...BROWSER_HEADERS,
         "Content-Type": "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
         "X-YouTube-Client-Name": "1",
         "X-YouTube-Client-Version": "2.20240101.00.00",
+        Origin: "https://www.youtube.com",
+        Referer: "https://www.youtube.com/",
       },
       body: JSON.stringify({
         videoId,
@@ -68,8 +39,8 @@ async function getPlayerResponse(videoId: string): Promise<unknown> {
       }),
     }
   );
-  if (!innertube.ok) throw new Error(`InnerTube returned ${innertube.status}`);
-  return innertube.json();
+  if (!res.ok) throw new Error(`InnerTube returned ${res.status}`);
+  return res.json();
 }
 
 function extractCaptionTracks(playerResponse: unknown): CaptionTrack[] {
@@ -105,7 +76,13 @@ function pickTrack(
 }
 
 async function fetchCaptionXml(baseUrl: string): Promise<string> {
-  const res = await fetch(baseUrl, { headers: BROWSER_HEADERS });
+  const res = await fetch(baseUrl, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Referer: "https://www.youtube.com/",
+    },
+  });
   if (!res.ok) throw new Error(`Caption fetch returned ${res.status}`);
   return res.text();
 }
