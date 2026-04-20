@@ -4,6 +4,17 @@ import { classifyTranscriptError } from "@/lib/youtube/transcript-errors";
 import { formatTimestamp } from "@/utils/bulkscript";
 import { rateLimit, getIp } from "@/lib/rate-limit";
 import type { TranscriptSegment } from "@/types/bulkscript";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+async function incrementUsage() {
+  const month = new Date().toISOString().slice(0, 7);
+  await supabase.rpc("increment_api_usage", { p_month: month }).catch(() => {});
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -69,6 +80,7 @@ export async function POST(req: Request) {
       };
     });
 
+    incrementUsage();
     return NextResponse.json({ ok: true, segments });
   } catch (e: unknown) {
     const msg =
