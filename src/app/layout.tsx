@@ -9,30 +9,36 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.ytranscript.net"),
   icons: { icon: "/icon.svg" },
-  title: "YTranscript — Get YouTube Transcripts Instantly",
+  title: "YouTube Transcript Generator — Free Bulk & Playlist Export | YTranscript",
   description:
-    "Paste any YouTube video or playlist link and get a clean, searchable transcript in seconds. Export as TXT, SRT, JSON, or CSV. Free, no account required.",
+    "Extract transcripts from any YouTube video, playlist or channel instantly. Free, no signup. Export as TXT, SRT, JSON or CSV. Bulk download entire playlists.",
   keywords: [
     "youtube transcript",
+    "youtube transcript generator",
+    "playlist transcript",
+    "channel transcript",
     "youtube to text",
     "get youtube captions",
     "extract youtube transcript",
     "youtube subtitle downloader",
+    "bulk youtube transcript",
     "video to text",
   ],
   openGraph: {
-    title: "YTranscript — Get YouTube Transcripts Instantly",
+    title: "YouTube Transcript Generator — Free Bulk & Playlist Export | YTranscript",
     description:
-      "Paste any YouTube video or playlist link and get a clean, searchable transcript in seconds. Free, no account required.",
+      "Extract transcripts from any YouTube video, playlist or channel instantly. Free, no signup. Export as TXT, SRT, JSON or CSV.",
     type: "website",
     url: "https://www.ytranscript.net",
     siteName: "YTranscript",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "YTranscript — YouTube Transcript Generator" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "YTranscript — Get YouTube Transcripts Instantly",
+    title: "YouTube Transcript Generator — Free Bulk & Playlist Export | YTranscript",
     description:
-      "Paste any YouTube video or playlist link and get a clean, searchable transcript in seconds. Free, no account required.",
+      "Extract transcripts from any YouTube video, playlist or channel instantly. Free, no signup. Export as TXT, SRT, JSON or CSV.",
+    images: ["/og-image.png"],
   },
   alternates: {
     canonical: "https://www.ytranscript.net",

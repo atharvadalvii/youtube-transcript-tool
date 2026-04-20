@@ -18,6 +18,18 @@ import { AuroraBackground } from "@/components/ui/aurora-background";
 import { AUTH_DISABLED } from "@/lib/auth-config";
 import { SITE_SHELL, siteFontStyle, sitePageClassName } from "@/lib/site-theme";
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "YTranscript",
+  url: "https://www.ytranscript.net",
+  applicationCategory: "UtilitiesApplication",
+  operatingSystem: "Web",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  description:
+    "Extract transcripts from any YouTube video, playlist or channel instantly. Free, no signup. Export as TXT, SRT, JSON or CSV.",
+};
+
 export default async function Home() {
   const supabase = await createClient();
   const {
@@ -28,6 +40,10 @@ export default async function Home() {
 
   return (
     <div className={sitePageClassName} style={siteFontStyle}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <MarketingHeader appUnlocked={appUnlocked} variant="full" />
 
       {/* Hero Section */}
@@ -41,9 +57,9 @@ export default async function Home() {
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-[3.25rem] font-bold text-gray-900 dark:text-zinc-50 tracking-tight leading-[1.08] mb-5">
-            Every word from any
+            YouTube Transcript Generator
             <br />
-            <span className="text-gray-600 dark:text-zinc-500">YouTube video.</span>
+            <span className="text-gray-600 dark:text-zinc-500">Free, Instant, Bulk.</span>
           </h1>
 
           <p className="text-base sm:text-lg font-medium text-gray-800 dark:text-zinc-300 max-w-xl mx-auto mb-9 sm:mb-10 leading-relaxed">
