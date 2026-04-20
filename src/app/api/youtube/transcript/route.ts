@@ -13,7 +13,7 @@ const supabase = createClient(
 
 async function incrementUsage() {
   const month = new Date().toISOString().slice(0, 7);
-  await supabase.rpc("increment_api_usage", { p_month: month }).catch(() => {});
+  await supabase.rpc("increment_api_usage", { p_month: month }).then(() => {}).catch(() => {});
 }
 
 export const runtime = "nodejs";
