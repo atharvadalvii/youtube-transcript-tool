@@ -66,9 +66,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const raw = await withScraperProxy(() =>
-      fetchTranscript(videoId, lang ? { lang } : undefined)
-    );
+    let raw;
+    try {
+      raw = await withScraperProxy(() =>
+        fetchTranscript(videoId, lang ? { lang } : undefined)
+      );
+    } catch (proxyErr) {
+      console.warn("[transcript] proxy failed, trying direct:", proxyErr instanceof Error ? proxyErr.message : proxyErr);
+      raw = await fetchTranscript(videoId, lang ? { lang } : undefined);
+    }
 
     const segments: TranscriptSegment[] = raw.map((line) => {
       const offsetLikelyMs = raw.some(l => l.offset >= 1000 && Number.isInteger(l.offset));
