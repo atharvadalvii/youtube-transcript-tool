@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.ytranscript.net"),
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
   title: "YouTube Transcript Generator — Free Bulk & Playlist Export | YTranscript",
   description:
     "Extract transcripts from any YouTube video, playlist or channel instantly. Free, no signup. Export as TXT, SRT, JSON or CSV. Bulk download entire playlists.",
