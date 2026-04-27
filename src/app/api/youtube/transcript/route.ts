@@ -68,6 +68,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const langKey = lang ?? "en";
+
+    const { data: cached } = await supabase
+      .from("transcripts")
+      .select("segments")
+      .eq("video_id", videoId)
+      .eq("lang", langKey)
+      .single();
+
+    if (cached) {
+      return NextResponse.json({ ok: true, segments: cached.segments });
+    }
+
     let raw;
     try {
       raw = await fetchTranscript(videoId, lang ? { lang } : undefined);
@@ -87,6 +100,11 @@ export async function POST(req: Request) {
         text: line.text,
       };
     });
+
+    supabase
+      .from("transcripts")
+      .upsert({ video_id: videoId, lang: langKey, segments, fetched_at: new Date().toISOString() })
+      .then(() => {}, () => {});
 
     incrementUsage();
     return NextResponse.json({ ok: true, segments });
