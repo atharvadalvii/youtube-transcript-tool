@@ -70,12 +70,12 @@ export async function POST(req: Request) {
 
     let raw;
     try {
+      raw = await fetchTranscript(videoId, lang ? { lang } : undefined);
+    } catch (directErr) {
+      console.warn("[transcript] direct fetch failed, trying proxy:", directErr instanceof Error ? directErr.message : directErr);
       raw = await withScraperProxy(() =>
         fetchTranscript(videoId, lang ? { lang } : undefined)
       );
-    } catch (proxyErr) {
-      console.warn("[transcript] proxy failed, trying direct:", proxyErr instanceof Error ? proxyErr.message : proxyErr);
-      raw = await fetchTranscript(videoId, lang ? { lang } : undefined);
     }
 
     const segments: TranscriptSegment[] = raw.map((line) => {
