@@ -20,9 +20,6 @@ async function incrementUsage() {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const INNERTUBE_VERSION = "20.10.38";
-const ANDROID_UA = `com.google.android.youtube/${INNERTUBE_VERSION} (Linux; U; Android 14)`;
-
 function decodeXmlEntities(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -38,26 +35,21 @@ function decodeXmlEntities(s: string): string {
 function parseTranscriptXml(xml: string): TranscriptSegment[] {
   const segments: TranscriptSegment[] = [];
 
-  // New timedtext format: <p t="offsetMs" d="durationMs">...</p>
   const newRe = /<p\s+t="(\d+)"\s+d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
   let m: RegExpExecArray | null;
   while ((m = newRe.exec(xml)) !== null) {
     const startSeconds = parseInt(m[1], 10) / 1000;
     let text = m[3];
-    // Extract text from <s> tags if present, otherwise strip all tags
     const sRe = /<s[^>]*>([^<]*)<\/s>/g;
     const sParts: string[] = [];
     let sm: RegExpExecArray | null;
     while ((sm = sRe.exec(text)) !== null) sParts.push(sm[1]);
-    text = sParts.length > 0
-      ? sParts.join("")
-      : text.replace(/<[^>]+>/g, "");
+    text = sParts.length > 0 ? sParts.join("") : text.replace(/<[^>]+>/g, "");
     text = decodeXmlEntities(text).trim();
     if (text) segments.push({ timestamp: formatTimestamp(startSeconds), startSeconds, text });
   }
   if (segments.length > 0) return segments;
 
-  // Legacy format: <text start="0.0" dur="3.0">text</text>
   const legacyRe = /<text start="([^"]*)" dur="([^"]*)">([^<]*)<\/text>/g;
   while ((m = legacyRe.exec(xml)) !== null) {
     const startSeconds = parseFloat(m[1]);
@@ -67,51 +59,57 @@ function parseTranscriptXml(xml: string): TranscriptSegment[] {
   return segments;
 }
 
-async function fetchTranscriptViaInnerTube(videoId: string, lang?: string): Promise<TranscriptSegment[]> {
+async function fetchTranscript(videoId: string, lang?: string): Promise<TranscriptSegment[]> {
+  const workerUrl = process.env.CF_TRANSCRIPT_WORKER_URL;
+
+  if (workerUrl) {
+    const res = await fetch(workerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(process.env.CF_WORKER_SECRET
+          ? { Authorization: `Bearer ${process.env.CF_WORKER_SECRET}` }
+          : {}),
+      },
+      body: JSON.stringify({ videoId, lang }),
+    });
+    const data = (await res.json()) as { ok: boolean; xml?: string; error?: string };
+    if (!data.ok || !data.xml) throw new Error(data.error ?? "Worker fetch failed");
+    return parseTranscriptXml(data.xml);
+  }
+
+  // Direct InnerTube fallback (works locally; blocked on Vercel by YouTube IP restrictions)
+  const VERSION = "20.10.38";
+  const UA = `com.google.android.youtube/${VERSION} (Linux; U; Android 14)`;
   const playerRes = await fetch(
     "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": ANDROID_UA },
+      headers: { "Content-Type": "application/json", "User-Agent": UA },
       body: JSON.stringify({
-        context: { client: { clientName: "ANDROID", clientVersion: INNERTUBE_VERSION } },
+        context: { client: { clientName: "ANDROID", clientVersion: VERSION } },
         videoId,
       }),
     }
   );
-
   if (!playerRes.ok) {
     throw new Error(`YouTube is receiving too many requests from this IP and now requires solving a captcha to continue`);
   }
-
   const playerData = await playerRes.json();
   const tracks: Array<{ languageCode: string; baseUrl: string }> =
     playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-
-  if (tracks.length === 0) {
-    throw new Error(`No transcripts are available for this video (${videoId})`);
-  }
-
+  if (tracks.length === 0) throw new Error(`No transcripts are available for this video (${videoId})`);
   const track = (lang ? tracks.find(t => t.languageCode === lang) : null) ?? tracks[0];
-
   if (lang && !tracks.find(t => t.languageCode === lang)) {
-    const available = tracks.map(t => t.languageCode);
-    throw new Error(`No transcripts are available in ${lang} this video (${videoId}). Available languages: ${available.join(", ")}`);
+    throw new Error(`No transcripts are available in ${lang} this video (${videoId}). Available languages: ${tracks.map(t => t.languageCode).join(", ")}`);
   }
-
-  const xmlRes = await fetch(track.baseUrl, { headers: { "User-Agent": ANDROID_UA } });
+  const xmlRes = await fetch(track.baseUrl, { headers: { "User-Agent": UA } });
   if (!xmlRes.ok) throw new Error(`Could not load captions for this video.`);
-
-  const xml = await xmlRes.text();
-  return parseTranscriptXml(xml);
+  return parseTranscriptXml(await xmlRes.text());
 }
 
 export async function POST(req: Request) {
-  const { allowed, retryAfterMs } = rateLimit(
-    `transcript:${getIp(req)}`,
-    60,
-    60_000,
-  );
+  const { allowed, retryAfterMs } = rateLimit(`transcript:${getIp(req)}`, 60, 60_000);
   if (!allowed) {
     return NextResponse.json(
       { ok: false, error: "Too many requests. Please wait a moment.", reason: "rate_limited" },
@@ -122,14 +120,9 @@ export async function POST(req: Request) {
     const body = (await req.json()) as { videoId?: string; lang?: string };
     const videoId = typeof body.videoId === "string" ? body.videoId.trim() : "";
     const lang =
-      typeof body.lang === "string" && body.lang.trim()
-        ? body.lang.trim()
-        : undefined;
+      typeof body.lang === "string" && body.lang.trim() ? body.lang.trim() : undefined;
     if (!videoId || !/^[\w-]{11}$/.test(videoId)) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid videoId" },
-        { status: 400 },
-      );
+      return NextResponse.json({ ok: false, error: "Invalid videoId" }, { status: 400 });
     }
 
     const langKey = lang ?? "en";
@@ -141,11 +134,9 @@ export async function POST(req: Request) {
       .eq("lang", langKey)
       .single();
 
-    if (cached) {
-      return NextResponse.json({ ok: true, segments: cached.segments });
-    }
+    if (cached) return NextResponse.json({ ok: true, segments: cached.segments });
 
-    const segments = await fetchTranscriptViaInnerTube(videoId, lang);
+    const segments = await fetchTranscript(videoId, lang);
 
     supabase
       .from("transcripts")
@@ -155,10 +146,7 @@ export async function POST(req: Request) {
     incrementUsage();
     return NextResponse.json({ ok: true, segments });
   } catch (e: unknown) {
-    const msg =
-      e instanceof Error
-        ? e.message
-        : "Could not load captions for this video.";
+    const msg = e instanceof Error ? e.message : "Could not load captions for this video.";
     const { reason, userMessage } = classifyTranscriptError(msg);
     return NextResponse.json({ ok: false, error: userMessage, reason });
   }
