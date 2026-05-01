@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchTranscript } from "youtube-transcript";
 import { classifyTranscriptError } from "@/lib/youtube/transcript-errors";
 import { formatTimestamp } from "@/utils/bulkscript";
 import { rateLimit, getIp } from "@/lib/rate-limit";
@@ -21,25 +20,90 @@ async function incrementUsage() {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function withScraperProxy<T>(fn: () => Promise<T>): Promise<T> {
-  const key = process.env.SCRAPERAPI_KEY;
-  if (!key) return fn();
+const INNERTUBE_VERSION = "20.10.38";
+const ANDROID_UA = `com.google.android.youtube/${INNERTUBE_VERSION} (Linux; U; Android 14)`;
 
-  const original = globalThis.fetch;
-  // @ts-ignore
-  globalThis.fetch = (url: RequestInfo | URL, init?: RequestInit) => {
-    const urlStr = url.toString();
-    if (urlStr.includes("youtube.com") || urlStr.includes("googlevideo.com")) {
-      const proxied = `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(urlStr)}&autoparse=false`;
-      console.log("[transcript] proxying:", urlStr.slice(0, 80));
-      return original(proxied, init);
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)));
+}
+
+function parseTranscriptXml(xml: string): TranscriptSegment[] {
+  const segments: TranscriptSegment[] = [];
+
+  // New timedtext format: <p t="offsetMs" d="durationMs">...</p>
+  const newRe = /<p\s+t="(\d+)"\s+d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
+  let m: RegExpExecArray | null;
+  while ((m = newRe.exec(xml)) !== null) {
+    const startSeconds = parseInt(m[1], 10) / 1000;
+    let text = m[3];
+    // Extract text from <s> tags if present, otherwise strip all tags
+    const sRe = /<s[^>]*>([^<]*)<\/s>/g;
+    const sParts: string[] = [];
+    let sm: RegExpExecArray | null;
+    while ((sm = sRe.exec(text)) !== null) sParts.push(sm[1]);
+    text = sParts.length > 0
+      ? sParts.join("")
+      : text.replace(/<[^>]+>/g, "");
+    text = decodeXmlEntities(text).trim();
+    if (text) segments.push({ timestamp: formatTimestamp(startSeconds), startSeconds, text });
+  }
+  if (segments.length > 0) return segments;
+
+  // Legacy format: <text start="0.0" dur="3.0">text</text>
+  const legacyRe = /<text start="([^"]*)" dur="([^"]*)">([^<]*)<\/text>/g;
+  while ((m = legacyRe.exec(xml)) !== null) {
+    const startSeconds = parseFloat(m[1]);
+    const text = decodeXmlEntities(m[3]).trim();
+    if (text) segments.push({ timestamp: formatTimestamp(startSeconds), startSeconds, text });
+  }
+  return segments;
+}
+
+async function fetchTranscriptViaInnerTube(videoId: string, lang?: string): Promise<TranscriptSegment[]> {
+  const playerRes = await fetch(
+    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": ANDROID_UA },
+      body: JSON.stringify({
+        context: { client: { clientName: "ANDROID", clientVersion: INNERTUBE_VERSION } },
+        videoId,
+      }),
     }
-    return original(url, init);
-  };
+  );
 
-  return fn().finally(() => {
-    globalThis.fetch = original;
-  });
+  if (!playerRes.ok) {
+    throw new Error(`YouTube is receiving too many requests from this IP and now requires solving a captcha to continue`);
+  }
+
+  const playerData = await playerRes.json();
+  const tracks: Array<{ languageCode: string; baseUrl: string }> =
+    playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+
+  if (tracks.length === 0) {
+    throw new Error(`No transcripts are available for this video (${videoId})`);
+  }
+
+  const track = (lang ? tracks.find(t => t.languageCode === lang) : null) ?? tracks[0];
+
+  if (lang && !tracks.find(t => t.languageCode === lang)) {
+    const available = tracks.map(t => t.languageCode);
+    throw new Error(`No transcripts are available in ${lang} this video (${videoId}). Available languages: ${available.join(", ")}`);
+  }
+
+  const xmlRes = await fetch(track.baseUrl, { headers: { "User-Agent": ANDROID_UA } });
+  if (!xmlRes.ok) throw new Error(`Could not load captions for this video.`);
+
+  const xml = await xmlRes.text();
+  return parseTranscriptXml(xml);
 }
 
 export async function POST(req: Request) {
@@ -81,25 +145,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, segments: cached.segments });
     }
 
-    let raw;
-    try {
-      raw = await fetchTranscript(videoId, lang ? { lang } : undefined);
-    } catch (directErr) {
-      console.warn("[transcript] direct fetch failed, trying proxy:", directErr instanceof Error ? directErr.message : directErr);
-      raw = await withScraperProxy(() =>
-        fetchTranscript(videoId, lang ? { lang } : undefined)
-      );
-    }
-
-    const segments: TranscriptSegment[] = raw.map((line) => {
-      const offsetLikelyMs = raw.some(l => l.offset >= 1000 && Number.isInteger(l.offset));
-      const startSeconds = offsetLikelyMs ? line.offset / 1000 : line.offset;
-      return {
-        timestamp: formatTimestamp(startSeconds),
-        startSeconds,
-        text: line.text,
-      };
-    });
+    const segments = await fetchTranscriptViaInnerTube(videoId, lang);
 
     supabase
       .from("transcripts")
