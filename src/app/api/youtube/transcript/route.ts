@@ -59,8 +59,67 @@ function parseTranscriptXml(xml: string): TranscriptSegment[] {
   return segments;
 }
 
+const INNERTUBE_VERSION = "20.10.38";
+const ANDROID_UA = `com.google.android.youtube/${INNERTUBE_VERSION} (Linux; U; Android 14)`;
+
+// YouTube blocks datacenter IPs (Vercel, Cloudflare Workers included) with a
+// "Sign in to confirm you're not a bot" response. ScraperAPI routes through
+// residential proxies, which is the one path that's actually worked in production.
+async function scraperApiFetch(url: string, init: RequestInit, key: string): Promise<Response> {
+  const proxied = `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(url)}`;
+  return fetch(proxied, init);
+}
+
+async function fetchTranscriptViaInnerTube(
+  videoId: string,
+  lang: string | undefined,
+  fetcher: (url: string, init: RequestInit) => Promise<Response>,
+): Promise<TranscriptSegment[]> {
+  const playerRes = await fetcher(
+    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": ANDROID_UA },
+      body: JSON.stringify({
+        context: { client: { clientName: "ANDROID", clientVersion: INNERTUBE_VERSION } },
+        videoId,
+      }),
+    },
+  );
+  if (!playerRes.ok) {
+    throw new Error(`YouTube is receiving too many requests from this IP and now requires solving a captcha to continue`);
+  }
+  const playerData = await playerRes.json();
+  if (playerData?.playabilityStatus?.status === "LOGIN_REQUIRED") {
+    throw new Error(`YouTube is receiving too many requests from this IP and now requires solving a captcha to continue`);
+  }
+  const tracks: Array<{ languageCode: string; baseUrl: string }> =
+    playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+  if (tracks.length === 0) throw new Error(`No transcripts are available for this video (${videoId})`);
+  const track = (lang ? tracks.find(t => t.languageCode === lang) : null) ?? tracks[0];
+  if (lang && !tracks.find(t => t.languageCode === lang)) {
+    throw new Error(`No transcripts are available in ${lang} this video (${videoId}). Available languages: ${tracks.map(t => t.languageCode).join(", ")}`);
+  }
+  const xmlRes = await fetcher(track.baseUrl, { headers: { "User-Agent": ANDROID_UA } });
+  if (!xmlRes.ok) throw new Error(`Could not load captions for this video.`);
+  return parseTranscriptXml(await xmlRes.text());
+}
+
 async function fetchTranscript(videoId: string, lang?: string): Promise<TranscriptSegment[]> {
+  const scraperKey = process.env.SCRAPERAPI_KEY;
   const workerUrl = process.env.CF_TRANSCRIPT_WORKER_URL;
+
+  if (scraperKey) {
+    try {
+      return await fetchTranscriptViaInnerTube(
+        videoId,
+        lang,
+        (url, init) => scraperApiFetch(url, init, scraperKey),
+      );
+    } catch (err) {
+      console.warn("[transcript] ScraperAPI path failed, falling back:", err instanceof Error ? err.message : err);
+    }
+  }
 
   if (workerUrl) {
     const res = await fetch(workerUrl, {
@@ -74,38 +133,12 @@ async function fetchTranscript(videoId: string, lang?: string): Promise<Transcri
       body: JSON.stringify({ videoId, lang }),
     });
     const data = (await res.json()) as { ok: boolean; xml?: string; error?: string };
-    if (!data.ok || !data.xml) throw new Error(data.error ?? "Worker fetch failed");
-    return parseTranscriptXml(data.xml);
+    if (data.ok && data.xml) return parseTranscriptXml(data.xml);
+    console.warn("[transcript] Worker path failed, falling back:", data.error);
   }
 
-  // Direct InnerTube fallback (works locally; blocked on Vercel by YouTube IP restrictions)
-  const VERSION = "20.10.38";
-  const UA = `com.google.android.youtube/${VERSION} (Linux; U; Android 14)`;
-  const playerRes = await fetch(
-    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": UA },
-      body: JSON.stringify({
-        context: { client: { clientName: "ANDROID", clientVersion: VERSION } },
-        videoId,
-      }),
-    }
-  );
-  if (!playerRes.ok) {
-    throw new Error(`YouTube is receiving too many requests from this IP and now requires solving a captcha to continue`);
-  }
-  const playerData = await playerRes.json();
-  const tracks: Array<{ languageCode: string; baseUrl: string }> =
-    playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-  if (tracks.length === 0) throw new Error(`No transcripts are available for this video (${videoId})`);
-  const track = (lang ? tracks.find(t => t.languageCode === lang) : null) ?? tracks[0];
-  if (lang && !tracks.find(t => t.languageCode === lang)) {
-    throw new Error(`No transcripts are available in ${lang} this video (${videoId}). Available languages: ${tracks.map(t => t.languageCode).join(", ")}`);
-  }
-  const xmlRes = await fetch(track.baseUrl, { headers: { "User-Agent": UA } });
-  if (!xmlRes.ok) throw new Error(`Could not load captions for this video.`);
-  return parseTranscriptXml(await xmlRes.text());
+  // Direct InnerTube fallback (works locally; blocked on Vercel/Cloudflare by YouTube IP restrictions)
+  return fetchTranscriptViaInnerTube(videoId, lang, fetch);
 }
 
 export async function POST(req: Request) {
