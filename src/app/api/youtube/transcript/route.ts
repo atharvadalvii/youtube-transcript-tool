@@ -61,20 +61,30 @@ function parseTranscriptXml(xml: string): TranscriptSegment[] {
 
 const INNERTUBE_VERSION = "20.10.38";
 const ANDROID_UA = `com.google.android.youtube/${INNERTUBE_VERSION} (Linux; U; Android 14)`;
+const RATE_LIMIT_MESSAGE = "YouTube is receiving too many requests from this IP and now requires solving a captcha to continue";
 
 // YouTube blocks datacenter IPs (Vercel, Cloudflare Workers included) with a
 // "Sign in to confirm you're not a bot" response. ScraperAPI routes through
 // residential proxies, which is the one path that's actually worked in production.
-async function scraperApiFetch(url: string, init: RequestInit, key: string): Promise<Response> {
-  const proxied = `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(url)}`;
+function scraperApiFetch(url: string, init: RequestInit, key: string, premium: boolean): Promise<Response> {
+  const proxied = `http://api.scraperapi.com?api_key=${key}${premium ? "&premium=true" : ""}&url=${encodeURIComponent(url)}`;
   return fetch(proxied, init);
 }
 
-async function fetchTranscriptViaInnerTube(
+// ScraperAPI's standard residential pool is a shared, rotating set of IPs that many
+// customers scrape YouTube through — a meaningful fraction of draws are already flagged
+// by YouTube's bot check and come back UNPLAYABLE ("try again later") or LOGIN_REQUIRED,
+// even though the request itself succeeded. That's a bad proxy draw, not a real failure,
+// so it's marked separately: callers retry it with a fresh draw (cheap) before escalating
+// to the premium proxy tier (far more reliable, ~10x the credit cost).
+class BlockedError extends Error {}
+
+type Track = { languageCode: string; baseUrl: string };
+
+async function fetchPlayerData(
   videoId: string,
-  lang: string | undefined,
   fetcher: (url: string, init: RequestInit) => Promise<Response>,
-): Promise<TranscriptSegment[]> {
+): Promise<unknown> {
   const playerRes = await fetcher(
     "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
     {
@@ -86,23 +96,46 @@ async function fetchTranscriptViaInnerTube(
       }),
     },
   );
-  if (!playerRes.ok) {
-    throw new Error(`YouTube is receiving too many requests from this IP and now requires solving a captcha to continue`);
-  }
+  if (!playerRes.ok) throw new BlockedError(RATE_LIMIT_MESSAGE);
   const playerData = await playerRes.json();
-  if (playerData?.playabilityStatus?.status === "LOGIN_REQUIRED") {
-    throw new Error(`YouTube is receiving too many requests from this IP and now requires solving a captcha to continue`);
-  }
-  const tracks: Array<{ languageCode: string; baseUrl: string }> =
-    playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+  const status = playerData?.playabilityStatus?.status;
+  const reason = playerData?.playabilityStatus?.reason ?? "";
+  // Only YouTube's known bot/rate-limit signatures are retried. Genuine unavailability
+  // (deleted, private, region-blocked) should surface immediately, not burn retries.
+  const isBotSignal = status === "LOGIN_REQUIRED" || (status === "UNPLAYABLE" && /try again later/i.test(reason));
+  if (isBotSignal) throw new BlockedError(RATE_LIMIT_MESSAGE);
+  if (status && status !== "OK") throw new Error(reason || `Video is not playable (${status})`);
+  return playerData;
+}
+
+function pickTrack(playerData: any, videoId: string, lang: string | undefined): Track {
+  const tracks: Track[] = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
   if (tracks.length === 0) throw new Error(`No transcripts are available for this video (${videoId})`);
   const track = (lang ? tracks.find(t => t.languageCode === lang) : null) ?? tracks[0];
   if (lang && !tracks.find(t => t.languageCode === lang)) {
     throw new Error(`No transcripts are available in ${lang} this video (${videoId}). Available languages: ${tracks.map(t => t.languageCode).join(", ")}`);
   }
+  return track;
+}
+
+async function fetchCaptionXml(
+  track: Track,
+  fetcher: (url: string, init: RequestInit) => Promise<Response>,
+): Promise<string> {
   const xmlRes = await fetcher(track.baseUrl, { headers: { "User-Agent": ANDROID_UA } });
   if (!xmlRes.ok) throw new Error(`Could not load captions for this video.`);
-  return parseTranscriptXml(await xmlRes.text());
+  return xmlRes.text();
+}
+
+async function fetchTranscriptViaInnerTube(
+  videoId: string,
+  lang: string | undefined,
+  fetcher: (url: string, init: RequestInit) => Promise<Response>,
+): Promise<TranscriptSegment[]> {
+  const playerData = await fetchPlayerData(videoId, fetcher);
+  const track = pickTrack(playerData, videoId, lang);
+  const xml = await fetchCaptionXml(track, fetcher);
+  return parseTranscriptXml(xml);
 }
 
 async function fetchTranscript(videoId: string, lang?: string): Promise<TranscriptSegment[]> {
@@ -110,14 +143,24 @@ async function fetchTranscript(videoId: string, lang?: string): Promise<Transcri
   const workerUrl = process.env.CF_TRANSCRIPT_WORKER_URL;
 
   if (scraperKey) {
-    try {
-      return await fetchTranscriptViaInnerTube(
-        videoId,
-        lang,
-        (url, init) => scraperApiFetch(url, init, scraperKey),
-      );
-    } catch (err) {
-      console.warn("[transcript] ScraperAPI path failed, falling back:", err instanceof Error ? err.message : err);
+    // Two cheap standard-proxy attempts, then one premium attempt as a last resort.
+    // The caption XML download itself doesn't need premium even when the player call did.
+    const plan = [false, false, true];
+    for (let i = 0; i < plan.length; i++) {
+      const premium = plan[i];
+      try {
+        const playerData = await fetchPlayerData(videoId, (url, init) => scraperApiFetch(url, init, scraperKey, premium));
+        const track = pickTrack(playerData, videoId, lang);
+        const xml = await fetchCaptionXml(track, (url, init) => scraperApiFetch(url, init, scraperKey, false));
+        return parseTranscriptXml(xml);
+      } catch (err) {
+        const blocked = err instanceof BlockedError;
+        console.warn(
+          `[transcript] ScraperAPI attempt ${i + 1}/${plan.length}${premium ? " (premium)" : ""}${blocked ? " (bad proxy draw, retrying)" : ""} failed:`,
+          err instanceof Error ? err.message : err,
+        );
+        if (!blocked || i === plan.length - 1) break;
+      }
     }
   }
 
